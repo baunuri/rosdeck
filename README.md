@@ -2,7 +2,7 @@
   <img src="assets/images/icon.png" width="120" alt="ROSDeck icon" />
 </p>
 
-<h1 align="center">ROSdeck</h1>
+<h1 align="center">ROSDeck</h1>
 
 <p align="center">
   A mobile dashboard for ROS2 robots.<br/>
@@ -26,7 +26,7 @@
 ## Features
 
 - **Rosbridge & Foxglove** — connect via `rosbridge_server` (port 9090) or `foxglove_bridge` (port 8765)
-- **Customizable layouts** — drag-and-drop widget grid, save layouts per robot
+- **Customizable layouts** — tmux-style split panes, save layouts per robot
 - **Auto-layout** — detects available topics and suggests a layout
 - **Demo mode** — try the app without a robot
 
