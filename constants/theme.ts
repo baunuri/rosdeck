@@ -1,0 +1,82 @@
+/**
+ * ROS2 Mobile Design System — Theme Constants
+ * Dark-first design for robotics professionals
+ * See docs/design-system.md for full specification
+ */
+
+export const theme = {
+  colors: {
+    bgBase: '#0D0D0D',
+    bgElevated: '#161616',
+    bgSurface: '#1E1E1E',
+    bgInset: '#111111',
+    borderSubtle: '#2A2A2A',
+    borderDefault: '#333333',
+    borderFocus: '#4A9EFF',
+    accentPrimary: '#4A9EFF',
+    accentPrimaryPressed: '#3A7FCC',
+    accentPrimaryMuted: '#4A9EFF1A',
+    statusConnected: '#34D399',
+    statusConnectedGlow: '#34D39933',
+    statusConnecting: '#FBBF24',
+    statusConnectingGlow: '#FBBF2433',
+    statusError: '#EF4444',
+    statusErrorGlow: '#EF444433',
+    statusDisconnected: '#6B7280',
+    statusDisconnectedGlow: '#6B728033',
+    textPrimary: '#F0F0F0',
+    textSecondary: '#A0A0A0',
+    textMuted: '#666666',
+    textValue: '#E0E0E0',
+    overlayLight: '#FFFFFF08',
+    overlayMedium: '#FFFFFF12',
+  },
+  spacing: {
+    xs: 4,
+    sm: 8,
+    md: 12,
+    lg: 16,
+    xl: 20,
+    '2xl': 24,
+    '3xl': 32,
+    '4xl': 40,
+  },
+  radius: {
+    sm: 2,
+    md: 2,
+    lg: 4,
+    xl: 4,
+    pill: 4,
+    full: 9999,
+  },
+  typography: {
+    headingLg: { fontSize: 22, fontWeight: '700' as const, lineHeight: 28.6 },
+    headingMd: { fontSize: 17, fontWeight: '600' as const, lineHeight: 22.95 },
+    headingSm: { fontSize: 15, fontWeight: '600' as const, lineHeight: 21 },
+    body: { fontSize: 14, fontWeight: '400' as const, lineHeight: 21 },
+    bodySm: { fontSize: 13, fontWeight: '400' as const, lineHeight: 18.85 },
+    label: {
+      fontSize: 12,
+      fontWeight: '500' as const,
+      lineHeight: 16.2,
+      letterSpacing: 0.8,
+      textTransform: 'uppercase' as const,
+    },
+    labelSm: { fontSize: 11, fontWeight: '500' as const, lineHeight: 14.3 },
+    monoLg: { fontSize: 16, fontWeight: '400' as const, lineHeight: 22.4, fontFamily: 'SpaceMono' },
+    monoMd: { fontSize: 14, fontWeight: '400' as const, lineHeight: 19.6, fontFamily: 'SpaceMono' },
+    monoSm: { fontSize: 12, fontWeight: '400' as const, lineHeight: 16.2, fontFamily: 'SpaceMono' },
+    monoXs: { fontSize: 10, fontWeight: '400' as const, lineHeight: 13, fontFamily: 'SpaceMono' },
+  },
+  joystick: {
+    phone: { radius: 75, knobSize: 56 },
+    tablet: { radius: 100, knobSize: 72 },
+    springConfig: { damping: 15, stiffness: 180, mass: 0.8 },
+  },
+  statusColors: {
+    disconnected: '#6B7280',
+    connecting: '#FBBF24',
+    connected: '#34D399',
+    error: '#EF4444',
+  } as Record<string, string>,
+} as const;
