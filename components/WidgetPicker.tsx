@@ -4,6 +4,7 @@ import { View, Text, TouchableOpacity, Modal, ScrollView, StyleSheet } from 'rea
 import { Ionicons } from '@expo/vector-icons';
 import { WIDGET_REGISTRY, WIDGET_CATEGORIES } from '../widgets/registry';
 import type { WidgetDefinition } from '../types/layout';
+import { useOrientation } from '../hooks/useOrientation';
 import { theme } from '../constants/theme';
 
 interface Props {
@@ -14,11 +15,12 @@ interface Props {
 
 export function WidgetPicker({ visible, onSelect, onClose }: Props) {
   const widgets = Object.values(WIDGET_REGISTRY);
+  const { isLandscape } = useOrientation();
 
   return (
     <Modal visible={visible} transparent animationType="fade">
-      <View style={styles.overlay}>
-        <View style={styles.container}>
+      <View style={[styles.overlay, isLandscape && styles.overlayLandscape]}>
+        <View style={[styles.container, isLandscape && styles.containerLandscape]}>
           <View style={styles.header}>
             <Text style={styles.title}>ADD WIDGET</Text>
             <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
@@ -26,12 +28,12 @@ export function WidgetPicker({ visible, onSelect, onClose }: Props) {
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.content}>
+          <ScrollView style={styles.content} contentContainerStyle={isLandscape ? styles.contentLandscape : undefined}>
             {WIDGET_CATEGORIES.map((category) => {
               const categoryWidgets = widgets.filter((w) => w.category === category);
               if (categoryWidgets.length === 0) return null;
               return (
-                <View key={category} style={styles.categorySection}>
+                <View key={category} style={[styles.categorySection, isLandscape && styles.categorySectionLandscape]}>
                   <Text style={styles.categoryLabel}>{category.toUpperCase()}</Text>
                   <View style={styles.widgetList}>
                     {categoryWidgets.map((widget) => (
@@ -67,6 +69,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 32,
   },
+  overlayLandscape: {
+    padding: 16,
+  },
   container: {
     backgroundColor: theme.colors.bgElevated,
     borderWidth: 1,
@@ -74,6 +79,9 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.lg,
     width: '100%',
     maxHeight: '70%',
+  },
+  containerLandscape: {
+    maxHeight: '90%',
   },
   header: {
     flexDirection: 'row',
@@ -90,8 +98,16 @@ const styles = StyleSheet.create({
   content: {
     padding: 16,
   },
+  contentLandscape: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
   categorySection: {
     marginBottom: 16,
+  },
+  categorySectionLandscape: {
+    width: '50%',
+    paddingHorizontal: 4,
   },
   categoryLabel: {
     ...theme.typography.label,

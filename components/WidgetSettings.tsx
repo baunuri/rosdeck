@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import type { WidgetConfigField } from '../types/layout';
 import { TopicPicker } from './TopicPicker';
 import { SeriesEditor } from './SeriesEditor';
+import { useOrientation } from '../hooks/useOrientation';
 import { theme } from '../constants/theme';
 
 interface Props {
@@ -247,6 +248,7 @@ function AxisMappingField({ config, onChange }: { config: Record<string, any>; o
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function WidgetSettings({ visible, widgetName, configSchema, config, onConfigChange, onClose }: Props) {
+  const { isLandscape } = useOrientation();
   const [draft, setDraft] = useState(config);
 
   // Sync draft from prop when modal opens. config is intentionally omitted
@@ -363,8 +365,8 @@ export function WidgetSettings({ visible, widgetName, configSchema, config, onCo
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
-      <View style={styles.overlay}>
-        <View style={styles.container}>
+      <View style={[styles.overlay, isLandscape && styles.overlayLandscape]}>
+        <View style={[styles.container, isLandscape && styles.containerLandscape]}>
           <View style={styles.header}>
             <Text style={styles.title}>{widgetName.toUpperCase()} SETTINGS</Text>
             <TouchableOpacity onPress={handleClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
@@ -390,6 +392,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 32,
   },
+  overlayLandscape: {
+    padding: 16,
+  },
   container: {
     backgroundColor: theme.colors.bgElevated,
     borderWidth: 1,
@@ -397,6 +402,9 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.lg,
     width: '100%',
     maxHeight: '80%',
+  },
+  containerLandscape: {
+    maxHeight: '95%',
   },
   header: {
     flexDirection: 'row',

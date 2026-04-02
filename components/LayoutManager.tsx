@@ -23,6 +23,7 @@ export function LayoutManager() {
   const savePreset = usePresetsStore((s) => s.savePreset);
   const removePreset = usePresetsStore((s) => s.removePreset);
 
+  const layoutListOpen = useLayoutStore((s) => s.layoutListOpen);
   const [listVisible, setListVisible] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
@@ -40,6 +41,14 @@ export function LayoutManager() {
   // Save-as-preset dialog
   const [savePresetFor, setSavePresetFor] = useState<{ id: string; name: string; tree: any } | null>(null);
   const [savePresetName, setSavePresetName] = useState('');
+
+  // Sync with store flag (for landscape rail button opening the list)
+  useEffect(() => {
+    if (layoutListOpen && !listVisible) {
+      setListVisible(true);
+      useLayoutStore.setState({ layoutListOpen: false });
+    }
+  }, [layoutListOpen]);
 
   useEffect(() => {
     if (listVisible || presetsVisible) loadPresets();

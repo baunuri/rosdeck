@@ -209,7 +209,13 @@ export default function ControlScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={isLandscape ? [] : ["top"]}>
-      {!isLandscape && (
+      {isLandscape ? (
+        // In landscape, LayoutManager is invisible but still renders its modals.
+        // The rail button triggers it via layoutListOpen store flag.
+        <View style={{ position: 'absolute', width: 0, height: 0, overflow: 'hidden' }}>
+          <LayoutManager />
+        </View>
+      ) : (
         <View style={styles.topBar}>
           <ConnectionDot />
           <LayoutManager />

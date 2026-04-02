@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import { Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { theme } from "../constants/theme";
+import { useOrientation } from "../hooks/useOrientation";
 import { useLayoutStore } from "../stores/useLayoutStore";
 import { findNode } from "../types/layout";
 import { getWidget } from "../widgets/registry";
@@ -22,6 +23,7 @@ export function SplitDivider({ nodeId, direction }: Props) {
   const updateSplitRatio = useLayoutStore((s) => s.updateSplitRatio);
   const swapChildren = useLayoutStore((s) => s.swapChildren);
   const editMode = useLayoutStore((s) => s.editMode);
+  const { isLandscape } = useOrientation();
   const [modalVisible, setModalVisible] = useState(false);
 
   const getCurrentRatio = (): number => {
@@ -94,14 +96,18 @@ export function SplitDivider({ nodeId, direction }: Props) {
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>RESIZE & SWAP</Text>
 
-            {/* Resize controls */}
+            {/* Resize controls — chevrons swap in landscape since grid is rotated */}
             <View style={styles.resizeRow}>
               <TouchableOpacity
                 style={styles.resizeArrow}
                 onPress={() => nudge(-RATIO_STEP)}
               >
                 <Ionicons
-                  name={isVertical ? "chevron-up" : "chevron-back"}
+                  name={
+                    isLandscape
+                      ? (isVertical ? "chevron-back" : "chevron-up")
+                      : (isVertical ? "chevron-up" : "chevron-back")
+                  }
                   size={20}
                   color={theme.colors.textPrimary}
                 />
@@ -116,7 +122,11 @@ export function SplitDivider({ nodeId, direction }: Props) {
                 onPress={() => nudge(RATIO_STEP)}
               >
                 <Ionicons
-                  name={isVertical ? "chevron-down" : "chevron-forward"}
+                  name={
+                    isLandscape
+                      ? (isVertical ? "chevron-forward" : "chevron-down")
+                      : (isVertical ? "chevron-down" : "chevron-forward")
+                  }
                   size={20}
                   color={theme.colors.textPrimary}
                 />

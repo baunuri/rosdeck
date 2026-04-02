@@ -3,6 +3,7 @@ import { View, TouchableOpacity, Text, Modal, StyleSheet } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { useLayoutStore } from '../stores/useLayoutStore';
+import { useOrientation } from '../hooks/useOrientation';
 import { WidgetPicker } from './WidgetPicker';
 import { WidgetSettings } from './WidgetSettings';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -37,6 +38,7 @@ export function LayoutEditor({
   const splitPane = useLayoutStore((s) => s.splitPane);
   const removePane = useLayoutStore((s) => s.removePane);
   const swapWidget = useLayoutStore((s) => s.swapWidget);
+  const { isLandscape } = useOrientation();
 
   // Check if splitting would create panes below minimum size
   const canSplitH = paneHeight / 2 >= MIN_PANE_SIZE; // horizontal split divides height
@@ -81,8 +83,10 @@ export function LayoutEditor({
           activeOpacity={0.8}
           onPress={() => { Haptics.selectionAsync(); setMenuVisible(true); }}
         >
-          <Text style={styles.overlayName}>{widgetDef?.name?.toUpperCase() || 'WIDGET'}</Text>
-          <Text style={styles.overlayHint}>TAP TO EDIT</Text>
+          <View style={isLandscape ? styles.overlayContentRotated : undefined}>
+            <Text style={styles.overlayName}>{widgetDef?.name?.toUpperCase() || 'WIDGET'}</Text>
+            <Text style={styles.overlayHint}>TAP TO EDIT</Text>
+          </View>
         </TouchableOpacity>
       </Animated.View>
 
@@ -98,16 +102,16 @@ export function LayoutEditor({
               {widgetDef?.name?.toUpperCase() || 'WIDGET'}
             </Text>
 
-            {/* Split options — disabled if pane too small */}
+            {/* Split options — labels swap in landscape since grid is rotated */}
             {canSplitH ? (
               <TouchableOpacity style={styles.menuItem} onPress={() => handleSplit('vertical')}>
                 <Ionicons name="remove-outline" size={18} color={theme.colors.textPrimary} />
-                <Text style={styles.menuText}>Split Horizontal</Text>
+                <Text style={styles.menuText}>{isLandscape ? 'Split Vertical' : 'Split Horizontal'}</Text>
               </TouchableOpacity>
             ) : (
               <View style={[styles.menuItem, styles.menuItemDisabled]}>
                 <Ionicons name="remove-outline" size={18} color={theme.colors.textMuted} />
-                <Text style={styles.menuTextDisabled}>Split Horizontal</Text>
+                <Text style={styles.menuTextDisabled}>{isLandscape ? 'Split Vertical' : 'Split Horizontal'}</Text>
                 <Text style={styles.menuHint}>too small</Text>
               </View>
             )}
@@ -115,12 +119,12 @@ export function LayoutEditor({
             {canSplitV ? (
               <TouchableOpacity style={styles.menuItem} onPress={() => handleSplit('horizontal')}>
                 <Ionicons name="resize-outline" size={18} color={theme.colors.textPrimary} />
-                <Text style={styles.menuText}>Split Vertical</Text>
+                <Text style={styles.menuText}>{isLandscape ? 'Split Horizontal' : 'Split Vertical'}</Text>
               </TouchableOpacity>
             ) : (
               <View style={[styles.menuItem, styles.menuItemDisabled]}>
                 <Ionicons name="resize-outline" size={18} color={theme.colors.textMuted} />
-                <Text style={styles.menuTextDisabled}>Split Vertical</Text>
+                <Text style={styles.menuTextDisabled}>{isLandscape ? 'Split Horizontal' : 'Split Vertical'}</Text>
                 <Text style={styles.menuHint}>too small</Text>
               </View>
             )}
@@ -181,6 +185,11 @@ const styles = StyleSheet.create({
   overlayTouchable: {
     flex: 1,
     justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+  },
+  overlayContentRotated: {
+    transform: [{ rotate: '90deg' }],
     alignItems: 'center',
     gap: 6,
   },

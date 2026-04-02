@@ -156,6 +156,19 @@ export function LandscapeTabRail() {
         <View style={styles.railControls}>
           <View style={styles.railDivider} />
           <TouchableOpacity
+            style={styles.railTab}
+            onPress={() => {
+              useLayoutStore.setState({ layoutListOpen: true });
+            }}
+            activeOpacity={0.7}
+          >
+            <Ionicons
+              name="layers-outline"
+              size={20}
+              color={theme.colors.textMuted}
+            />
+          </TouchableOpacity>
+          <TouchableOpacity
             style={[styles.railTab, editMode && styles.railEditActive]}
             onPress={() => setEditMode(!editMode)}
             activeOpacity={0.7}

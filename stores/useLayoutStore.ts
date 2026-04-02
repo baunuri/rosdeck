@@ -19,6 +19,7 @@ interface LayoutState {
   layouts: SavedLayout[];
   activeLayoutId: string;
   editMode: boolean;
+  layoutListOpen: boolean;
 
   initForRobot: (url: string) => Promise<void>;
   setActiveLayout: (id: string) => void;
@@ -43,6 +44,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
   layouts: [],
   activeLayoutId: '',
   editMode: false,
+  layoutListOpen: false,
 
   initForRobot: async (url: string) => {
     const key = STORAGE_KEY_PREFIX + url;
@@ -195,5 +197,5 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
     await AsyncStorage.setItem(key, JSON.stringify({ layouts, activeLayoutId }));
   },
 
-  reset: () => set({ robotUrl: null, layouts: [], activeLayoutId: '', editMode: false }),
+  reset: () => set({ robotUrl: null, layouts: [], activeLayoutId: '', editMode: false, layoutListOpen: false }),
 }));
