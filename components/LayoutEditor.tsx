@@ -105,12 +105,16 @@ export function LayoutEditor({
             {/* Split options — labels and icons swap in landscape since grid is rotated */}
             {canSplitH ? (
               <TouchableOpacity style={styles.menuItem} onPress={() => handleSplit('vertical')}>
-                <Ionicons name="remove" size={18} color={theme.colors.textPrimary} />
+                <View style={isLandscape ? styles.iconRotated : undefined}>
+                  <Ionicons name="remove" size={18} color={theme.colors.textPrimary} />
+                </View>
                 <Text style={styles.menuText}>{isLandscape ? 'Split Vertical' : 'Split Horizontal'}</Text>
               </TouchableOpacity>
             ) : (
               <View style={[styles.menuItem, styles.menuItemDisabled]}>
-                <Ionicons name="remove" size={18} color={theme.colors.textMuted} />
+                <View style={isLandscape ? styles.iconRotated : undefined}>
+                  <Ionicons name="remove" size={18} color={theme.colors.textMuted} />
+                </View>
                 <Text style={styles.menuTextDisabled}>{isLandscape ? 'Split Vertical' : 'Split Horizontal'}</Text>
                 <Text style={styles.menuHint}>too small</Text>
               </View>
@@ -118,14 +122,14 @@ export function LayoutEditor({
 
             {canSplitV ? (
               <TouchableOpacity style={styles.menuItem} onPress={() => handleSplit('horizontal')}>
-                <View style={styles.iconRotated}>
+                <View style={isLandscape ? undefined : styles.iconRotated}>
                   <Ionicons name="remove" size={18} color={theme.colors.textPrimary} />
                 </View>
                 <Text style={styles.menuText}>{isLandscape ? 'Split Horizontal' : 'Split Vertical'}</Text>
               </TouchableOpacity>
             ) : (
               <View style={[styles.menuItem, styles.menuItemDisabled]}>
-                <View style={styles.iconRotated}>
+                <View style={isLandscape ? undefined : styles.iconRotated}>
                   <Ionicons name="remove" size={18} color={theme.colors.textMuted} />
                 </View>
                 <Text style={styles.menuTextDisabled}>{isLandscape ? 'Split Horizontal' : 'Split Vertical'}</Text>
