@@ -38,9 +38,12 @@ export function suggestLayout(topics: TopicInfo[]): TopicSuggestion | null {
     }
   }
 
-  // Camera: only use CompressedImage topics. Raw Image is never processed
-  // (multi-MB frames would flood the websocket and freeze the app).
-  const cameraTopic = topics.find((t) => /CompressedImage/.test(t.type));
+  // Camera: only use CompressedImage topics, excluding depth/theora variants.
+  // Raw Image is never processed (multi-MB frames would freeze the app).
+  const cameraTopic = topics.find((t) =>
+    t.type === 'sensor_msgs/msg/CompressedImage' &&
+    !/[Dd]epth|theora/.test(t.name)
+  );
   if (cameraTopic) {
     detected.push({ name: cameraTopic.name, type: cameraTopic.type, widgetType: 'camera' });
     widgetConfigs.camera = { topic: cameraTopic.name, source: 'transport' };

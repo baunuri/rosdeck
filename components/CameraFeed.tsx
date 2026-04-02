@@ -16,6 +16,25 @@ import { WidgetEmptyState } from "./WidgetEmptyState";
 // that slipped through, or a corrupt message.
 const MAX_COMPRESSED_SIZE = 2 * 1024 * 1024;
 
+// Topic names containing these substrings are depth or special image topics
+// that produce large 16-bit PNG data — not standard camera JPEG.
+const EXCLUDED_TOPIC_PATTERNS = [
+  /[Dd]epth/,
+  /compressedDepth/,
+  /theora/,
+];
+
+function isCameraImageTopic(topicName: string, topicType: string): boolean {
+  if (topicType !== 'sensor_msgs/msg/CompressedImage') return false;
+  if (EXCLUDED_TOPIC_PATTERNS.some((p) => p.test(topicName))) return false;
+  return true;
+}
+
+const DEBUG_CAMERA = __DEV__;
+function cameraLog(...args: any[]) {
+  if (DEBUG_CAMERA) console.log('[CameraFeed]', ...args);
+}
+
 // Minimum size: a valid JPEG/PNG header is at least a few bytes
 const MIN_IMAGE_SIZE = 8;
 
@@ -128,13 +147,15 @@ export function CameraFeed(props?: Partial<WidgetProps>) {
     if (!showEmptyState || hasReceivedFrame.current) return;
 
     transport.getTopics().then((topics) => {
+      cameraLog('Auto-detect: scanning', topics.length, 'topics');
       const compressed = topics.find(
-        (t) =>
-          t.type === "sensor_msgs/msg/CompressedImage" &&
-          t.name !== cameraTopic,
+        (t) => t.name !== cameraTopic && isCameraImageTopic(t.name, t.type),
       );
       if (compressed && props?.onConfigChange) {
+        cameraLog('Auto-detect: switching to', compressed.name);
         props.onConfigChange({ ...props.config, topic: compressed.name });
+      } else {
+        cameraLog('Auto-detect: no suitable CompressedImage topic found');
       }
     });
   }, [showEmptyState, status, cameraSource, autoDetectTopics]);
@@ -155,9 +176,11 @@ export function CameraFeed(props?: Partial<WidgetProps>) {
     transport.getTopics().then((topics) => {
       if (cancelled) return;
       const match = topics.find((t) => t.name === cameraTopic);
-      if (match && /CompressedImage/.test(match.type)) {
+      if (match && isCameraImageTopic(match.name, match.type)) {
+        cameraLog('Verified topic:', cameraTopic, '→', match.type);
         setVerifiedTopic(cameraTopic);
       } else {
+        cameraLog('Rejected topic:', cameraTopic, match ? `(type: ${match.type})` : '(not found)');
         setVerifiedTopic(null);
       }
     });
@@ -193,18 +216,43 @@ export function CameraFeed(props?: Partial<WidgetProps>) {
         frameCount.current++;
         if (!hasReceivedFrame.current) {
           hasReceivedFrame.current = true;
+          cameraLog('First frame decoded successfully');
           setShowEmptyState(false);
+        }
+      } else {
+        decodeFailCount++;
+        if (decodeFailCount <= 3) {
+          const size = data instanceof Uint8Array ? data.length
+            : typeof data === 'string' ? data.length
+            : '?';
+          cameraLog('Decode failed, data size:', size,
+            'type:', typeof data,
+            data instanceof Uint8Array ? `magic: ${[...data.slice(0, 4)].map(b => b.toString(16).padStart(2, '0')).join(' ')}` : '');
         }
       }
     };
+
+    cameraLog('Subscribing to', verifiedTopic, 'at', maxFps, 'fps max');
+    let msgCount = 0;
+    let dropCount = 0;
+    let decodeFailCount = 0;
 
     const sub = transport.subscribe(
       verifiedTopic,
       "sensor_msgs/msg/CompressedImage",
       (msg: any) => {
+        msgCount++;
         // Drop raw Image messages (have encoding/width/height fields)
         // and anything without compressed data
-        if (!msg.data || msg.encoding || msg.width || msg.height) return;
+        if (!msg.data || msg.encoding || msg.width || msg.height) {
+          dropCount++;
+          if (dropCount <= 3) {
+            cameraLog('Dropped msg #' + msgCount + ': raw image fields detected',
+              { hasData: !!msg.data, encoding: msg.encoding, width: msg.width, height: msg.height,
+                format: msg.format, keys: Object.keys(msg).join(',') });
+          }
+          return;
+        }
 
         const now = Date.now();
         if (now - lastFrameTime < MIN_FRAME_INTERVAL_MS) return;
@@ -218,8 +266,20 @@ export function CameraFeed(props?: Partial<WidgetProps>) {
       MIN_FRAME_INTERVAL_MS,
     );
 
+    // Periodic stats log
+    const statsInterval = setInterval(() => {
+      if (msgCount > 0) {
+        cameraLog(`Stats: ${msgCount} msgs, ${dropCount} dropped, ${decodeFailCount} decode fails, ${frameCount.current} rendered`);
+        msgCount = 0;
+        dropCount = 0;
+        decodeFailCount = 0;
+      }
+    }, 5000);
+
     return () => {
+      cameraLog('Unsubscribing from', verifiedTopic);
       sub.unsubscribe();
+      clearInterval(statsInterval);
       if (rafId !== null) cancelAnimationFrame(rafId);
       pendingData = null;
       setCurrentFrame((prev) => {
