@@ -8,7 +8,6 @@ import { DEFAULTS } from "../constants/defaults";
 import { theme } from "../constants/theme";
 import { buildMjpegUrl, parseRobotIp } from "../lib/ros";
 import { useRosStore } from "../stores/useRosStore";
-import { useSettingsStore } from "../stores/useSettingsStore";
 import type { WidgetProps } from "../types/layout";
 import { WidgetEmptyState } from "./WidgetEmptyState";
 
@@ -16,17 +15,21 @@ import { WidgetEmptyState } from "./WidgetEmptyState";
 // that slipped through, or a corrupt message.
 const MAX_COMPRESSED_SIZE = 2 * 1024 * 1024;
 
-// Topic names containing these substrings are depth or special image topics
-// that produce large 16-bit PNG data — not standard camera JPEG.
-const EXCLUDED_TOPIC_PATTERNS = [
-  /[Dd]epth/,
-  /compressedDepth/,
-  /theora/,
-];
-
+/**
+ * Check if a topic is a standard compressed camera image we can decode.
+ * Only allows topics whose name ends with /compressed (the standard
+ * image_transport convention) or whose name contains "compressed" but not
+ * any known non-JPEG variants (depth, theora, zstd, etc.).
+ *
+ * Allowlist approach: safer than trying to exclude every variant.
+ */
 function isCameraImageTopic(topicName: string, topicType: string): boolean {
   if (topicType !== 'sensor_msgs/msg/CompressedImage') return false;
-  if (EXCLUDED_TOPIC_PATTERNS.some((p) => p.test(topicName))) return false;
+  // Standard image_transport compressed topic: /foo/compressed
+  if (topicName.endsWith('/compressed')) return true;
+  // Reject known non-JPEG variants by name
+  if (/[Dd]epth|theora|zstd|h264|h265|hevc|avif|svt/.test(topicName)) return false;
+  // Allow other CompressedImage topics (e.g., /camera/compressed_image)
   return true;
 }
 
@@ -139,26 +142,6 @@ export function CameraFeed(props?: Partial<WidgetProps>) {
     }
   }, [status, cameraSource, mjpegError]);
 
-  // Auto-detect a CompressedImage topic when the configured topic has no data
-  const autoDetectTopics = useSettingsStore((s) => s.autoDetectTopics);
-  useEffect(() => {
-    if (!autoDetectTopics) return;
-    if (cameraSource === "mjpeg" || !transport || status !== "connected") return;
-    if (!showEmptyState || hasReceivedFrame.current) return;
-
-    transport.getTopics().then((topics) => {
-      cameraLog('Auto-detect: scanning', topics.length, 'topics');
-      const compressed = topics.find(
-        (t) => t.name !== cameraTopic && isCameraImageTopic(t.name, t.type),
-      );
-      if (compressed && props?.onConfigChange) {
-        cameraLog('Auto-detect: switching to', compressed.name);
-        props.onConfigChange({ ...props.config, topic: compressed.name });
-      } else {
-        cameraLog('Auto-detect: no suitable CompressedImage topic found');
-      }
-    });
-  }, [showEmptyState, status, cameraSource, autoDetectTopics]);
 
   // Subscribe to image topic via transport (throttled to ~10fps).
   // First verify the topic actually publishes CompressedImage — subscribing to a
