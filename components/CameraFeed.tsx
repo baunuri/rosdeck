@@ -17,6 +17,10 @@ import { WidgetEmptyState } from "./WidgetEmptyState";
  * - Rosbridge: msg.data is base64 string → decode to bytes → Skia
  * - Foxglove: msg.data is Uint8Array (raw JPEG) → Skia directly
  */
+// Max compressed image size: 2MB. Anything larger is likely raw image data
+// that slipped through, or a corrupt message.
+const MAX_COMPRESSED_SIZE = 2 * 1024 * 1024;
+
 function decodeToSkImage(data: any): SkImage | null {
   try {
     let bytes: Uint8Array;
@@ -25,6 +29,7 @@ function decodeToSkImage(data: any): SkImage | null {
     } else if (data instanceof ArrayBuffer) {
       bytes = new Uint8Array(data);
     } else if (typeof data === "string") {
+      if (data.length === 0) return null;
       // Base64 string from rosbridge — decode to bytes
       const raw = atob(data);
       bytes = new Uint8Array(raw.length);
@@ -34,6 +39,7 @@ function decodeToSkImage(data: any): SkImage | null {
     } else {
       return null;
     }
+    if (bytes.length === 0 || bytes.length > MAX_COMPRESSED_SIZE) return null;
     const skData = Skia.Data.fromBytes(bytes);
     return Skia.Image.MakeImageFromEncoded(skData);
   } catch {
@@ -171,7 +177,9 @@ export function CameraFeed(props?: Partial<WidgetProps>) {
       verifiedTopic,
       "sensor_msgs/msg/CompressedImage",
       (msg: any) => {
-        if (!msg.data || msg.encoding) return;
+        // Drop raw Image messages (have encoding/width/height fields)
+        // and anything without compressed data
+        if (!msg.data || msg.encoding || msg.width || msg.height) return;
 
         const now = Date.now();
         if (now - lastFrameTime < MIN_FRAME_INTERVAL_MS) return;
