@@ -12,15 +12,39 @@ import { useSettingsStore } from "../stores/useSettingsStore";
 import type { WidgetProps } from "../types/layout";
 import { WidgetEmptyState } from "./WidgetEmptyState";
 
-/**
- * Decode CompressedImage data into a Skia SkImage.
- * - Rosbridge: msg.data is base64 string → decode to bytes → Skia
- * - Foxglove: msg.data is Uint8Array (raw JPEG) → Skia directly
- */
 // Max compressed image size: 2MB. Anything larger is likely raw image data
 // that slipped through, or a corrupt message.
 const MAX_COMPRESSED_SIZE = 2 * 1024 * 1024;
 
+// Minimum size: a valid JPEG/PNG header is at least a few bytes
+const MIN_IMAGE_SIZE = 8;
+
+/**
+ * Validate that bytes start with a known image format magic signature.
+ * Returns false for raw pixel data, corrupt data, or unknown formats.
+ */
+function isKnownImageFormat(bytes: Uint8Array): boolean {
+  if (bytes.length < MIN_IMAGE_SIZE) return false;
+  // JPEG: FF D8 FF
+  if (bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF) return true;
+  // PNG: 89 50 4E 47 0D 0A 1A 0A
+  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47) return true;
+  // WebP: RIFF....WEBP
+  if (bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
+      bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50) return true;
+  // BMP: 42 4D
+  if (bytes[0] === 0x42 && bytes[1] === 0x4D) return true;
+  return false;
+}
+
+/**
+ * Decode CompressedImage data into a Skia SkImage.
+ * - Rosbridge: msg.data is base64 string → decode to bytes → Skia
+ * - Foxglove: msg.data is Uint8Array (raw JPEG) → Skia directly
+ *
+ * Validates magic bytes before attempting decode to avoid passing
+ * raw pixel data or garbage to Skia.
+ */
 function decodeToSkImage(data: any): SkImage | null {
   try {
     let bytes: Uint8Array;
@@ -39,7 +63,8 @@ function decodeToSkImage(data: any): SkImage | null {
     } else {
       return null;
     }
-    if (bytes.length === 0 || bytes.length > MAX_COMPRESSED_SIZE) return null;
+    if (bytes.length < MIN_IMAGE_SIZE || bytes.length > MAX_COMPRESSED_SIZE) return null;
+    if (!isKnownImageFormat(bytes)) return null;
     const skData = Skia.Data.fromBytes(bytes);
     return Skia.Image.MakeImageFromEncoded(skData);
   } catch {
