@@ -135,7 +135,7 @@ export function LayoutRenderer() {
   // Only deltas delivered to widget callbacks need remapping.
   useEffect(() => {
     if (isLandscape) {
-      setDeltaTransform((dx, dy) => ({ dx: dy, dy: -dx }));
+      setDeltaTransform((dx, dy) => ({ dx: -dy, dy: dx }));
     } else {
       setDeltaTransform((dx, dy) => ({ dx, dy }));
     }
