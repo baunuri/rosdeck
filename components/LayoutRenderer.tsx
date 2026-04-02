@@ -167,12 +167,21 @@ export function LayoutRenderer() {
         isLandscape ? (
           <View
             style={{
-              width: gridWidth,
-              height: gridHeight,
-              transform: [{ rotate: '-90deg' }],
+              width: size.width,
+              height: size.height,
+              alignItems: 'center',
+              justifyContent: 'center',
             }}
           >
-            <RenderNode node={layout.tree} width={gridWidth} height={gridHeight} />
+            <View
+              style={{
+                width: gridWidth,
+                height: gridHeight,
+                transform: [{ rotate: '-90deg' }],
+              }}
+            >
+              <RenderNode node={layout.tree} width={gridWidth} height={gridHeight} />
+            </View>
           </View>
         ) : (
           <RenderNode node={layout.tree} width={gridWidth} height={gridHeight} />
