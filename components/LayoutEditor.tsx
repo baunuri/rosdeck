@@ -102,15 +102,15 @@ export function LayoutEditor({
               {widgetDef?.name?.toUpperCase() || 'WIDGET'}
             </Text>
 
-            {/* Split options — labels swap in landscape since grid is rotated */}
+            {/* Split options — labels and icons swap in landscape since grid is rotated */}
             {canSplitH ? (
               <TouchableOpacity style={styles.menuItem} onPress={() => handleSplit('vertical')}>
-                <Ionicons name="remove-outline" size={18} color={theme.colors.textPrimary} />
+                <Ionicons name={isLandscape ? "resize-outline" : "remove-outline"} size={18} color={theme.colors.textPrimary} />
                 <Text style={styles.menuText}>{isLandscape ? 'Split Vertical' : 'Split Horizontal'}</Text>
               </TouchableOpacity>
             ) : (
               <View style={[styles.menuItem, styles.menuItemDisabled]}>
-                <Ionicons name="remove-outline" size={18} color={theme.colors.textMuted} />
+                <Ionicons name={isLandscape ? "resize-outline" : "remove-outline"} size={18} color={theme.colors.textMuted} />
                 <Text style={styles.menuTextDisabled}>{isLandscape ? 'Split Vertical' : 'Split Horizontal'}</Text>
                 <Text style={styles.menuHint}>too small</Text>
               </View>
@@ -118,12 +118,12 @@ export function LayoutEditor({
 
             {canSplitV ? (
               <TouchableOpacity style={styles.menuItem} onPress={() => handleSplit('horizontal')}>
-                <Ionicons name="resize-outline" size={18} color={theme.colors.textPrimary} />
+                <Ionicons name={isLandscape ? "remove-outline" : "resize-outline"} size={18} color={theme.colors.textPrimary} />
                 <Text style={styles.menuText}>{isLandscape ? 'Split Horizontal' : 'Split Vertical'}</Text>
               </TouchableOpacity>
             ) : (
               <View style={[styles.menuItem, styles.menuItemDisabled]}>
-                <Ionicons name="resize-outline" size={18} color={theme.colors.textMuted} />
+                <Ionicons name={isLandscape ? "remove-outline" : "resize-outline"} size={18} color={theme.colors.textMuted} />
                 <Text style={styles.menuTextDisabled}>{isLandscape ? 'Split Horizontal' : 'Split Vertical'}</Text>
                 <Text style={styles.menuHint}>too small</Text>
               </View>
