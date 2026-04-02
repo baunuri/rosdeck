@@ -1,12 +1,21 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import { View, StyleSheet } from 'react-native';
 import type { LayoutNode } from '../types/layout';
 import { getWidget } from '../widgets/registry';
 import { useLayoutStore } from '../stores/useLayoutStore';
 import { SplitDivider } from './SplitDivider';
 import { LayoutEditor } from './LayoutEditor';
+import { WidgetContentWrapper } from './WidgetContentWrapper';
+import { useOrientation } from '../hooks/useOrientation';
 import { theme } from '../constants/theme';
 import { dispatchTouchStart, dispatchTouchMove, dispatchTouchEnd } from '../lib/touch-dispatcher';
+
+export function remapTouchToPortrait(
+  lx: number, ly: number, isLandscape: boolean, containerWidth: number
+): { px: number; py: number } {
+  if (!isLandscape) return { px: lx, py: ly };
+  return { px: ly, py: containerWidth - lx };
+}
 
 // Pure function for testing — computes the geometry of the layout tree
 export type ResolvedNode =
@@ -48,21 +57,26 @@ interface RenderNodeProps {
 
 function RenderNode({ node, width, height, parentSplitId, parentDirection }: RenderNodeProps) {
   const editMode = useLayoutStore((s) => s.editMode);
+  const { isLandscape } = useOrientation();
 
   if (node.type === 'widget') {
     const widgetDef = getWidget(node.widgetType);
     if (!widgetDef) return <View style={{ width, height, backgroundColor: theme.colors.bgSurface }} />;
     const Widget = widgetDef.component;
+    const contentWidth = isLandscape ? height : width;
+    const contentHeight = isLandscape ? width : height;
     return (
       <View style={{ width, height, position: 'relative' }}>
-        <Widget
-          config={node.config}
-          onConfigChange={(newConfig) => {
-            useLayoutStore.getState().updateWidgetConfig(node.id, newConfig);
-          }}
-          width={width}
-          height={height}
-        />
+        <WidgetContentWrapper width={width} height={height}>
+          <Widget
+            config={node.config}
+            onConfigChange={(newConfig) => {
+              useLayoutStore.getState().updateWidgetConfig(node.id, newConfig);
+            }}
+            width={contentWidth}
+            height={contentHeight}
+          />
+        </WidgetContentWrapper>
         {editMode && (
           <LayoutEditor
             nodeId={node.id}
@@ -112,8 +126,30 @@ function RenderNode({ node, width, height, parentSplitId, parentDirection }: Ren
 export function LayoutRenderer() {
   const layout = useLayoutStore((s) => s.getActiveLayout());
   const [size, setSize] = React.useState({ width: 0, height: 0 });
+  const { isLandscape } = useOrientation();
+
+  const isLandscapeRef = useRef(false);
+  const portraitWidthRef = useRef(0);
+
+  useEffect(() => {
+    isLandscapeRef.current = isLandscape;
+    portraitWidthRef.current = size.height; // landscape short dim = portrait width
+  }, [isLandscape, size.height]);
 
   if (!layout) return null;
+
+  // In landscape, swap dimensions so grid renders in portrait proportions
+  const gridWidth = isLandscape ? size.height : size.width;
+  const gridHeight = isLandscape ? size.width : size.height;
+
+  const remapTouches = (touches: any[]) =>
+    touches.map((t) => {
+      if (isLandscapeRef.current) {
+        const { px, py } = remapTouchToPortrait(t.pageX, t.pageY, true, portraitWidthRef.current);
+        return { ...t, pageX: px, pageY: py };
+      }
+      return t;
+    });
 
   return (
     <View
@@ -122,13 +158,25 @@ export function LayoutRenderer() {
         const { width, height } = e.nativeEvent.layout;
         setSize({ width, height });
       }}
-      onTouchStart={(e) => dispatchTouchStart([...e.nativeEvent.changedTouches])}
-      onTouchMove={(e) => dispatchTouchMove([...e.nativeEvent.changedTouches])}
-      onTouchEnd={(e) => dispatchTouchEnd([...e.nativeEvent.changedTouches])}
-      onTouchCancel={(e) => dispatchTouchEnd([...e.nativeEvent.changedTouches])}
+      onTouchStart={(e) => dispatchTouchStart(remapTouches([...e.nativeEvent.changedTouches]))}
+      onTouchMove={(e) => dispatchTouchMove(remapTouches([...e.nativeEvent.changedTouches]))}
+      onTouchEnd={(e) => dispatchTouchEnd(remapTouches([...e.nativeEvent.changedTouches]))}
+      onTouchCancel={(e) => dispatchTouchEnd(remapTouches([...e.nativeEvent.changedTouches]))}
     >
       {size.width > 0 && size.height > 0 && (
-        <RenderNode node={layout.tree} width={size.width} height={size.height} />
+        isLandscape ? (
+          <View
+            style={{
+              width: gridWidth,
+              height: gridHeight,
+              transform: [{ rotate: '-90deg' }],
+            }}
+          >
+            <RenderNode node={layout.tree} width={gridWidth} height={gridHeight} />
+          </View>
+        ) : (
+          <RenderNode node={layout.tree} width={gridWidth} height={gridHeight} />
+        )
       )}
     </View>
   );

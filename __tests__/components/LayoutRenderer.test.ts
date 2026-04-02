@@ -46,7 +46,11 @@ jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
 }));
 
-import { resolveLayout } from '../../components/LayoutRenderer';
+jest.mock('../../hooks/useOrientation', () => ({
+  useOrientation: () => ({ isLandscape: false, orientation: 'portrait', screenWidth: 390, screenHeight: 844 }),
+}));
+
+import { resolveLayout, remapTouchToPortrait } from '../../components/LayoutRenderer';
 import { createWidgetNode, createSplitNode } from '../../types/layout';
 
 describe('resolveLayout', () => {
@@ -91,5 +95,18 @@ describe('resolveLayout', () => {
       expect(result.second.width).toBe(200);
       expect(result.first.height).toBe(300);
     }
+  });
+});
+
+describe('remapTouchToPortrait', () => {
+  it('returns original coords in portrait', () => {
+    const result = remapTouchToPortrait(100, 200, false, 390);
+    expect(result).toEqual({ px: 100, py: 200 });
+  });
+
+  it('remaps landscape coords to portrait space', () => {
+    // For -90deg rotation: px = ly, py = containerWidth - lx
+    const result = remapTouchToPortrait(300, 150, true, 390);
+    expect(result).toEqual({ px: 150, py: 90 }); // py = 390 - 300
   });
 });
