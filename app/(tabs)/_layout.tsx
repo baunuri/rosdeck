@@ -1,7 +1,7 @@
 import { Tabs } from 'expo-router';
 import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CustomTabBar, RAIL_WIDTH } from '../../components/CustomTabBar';
+import { CustomTabBar, LandscapeTabRail, RAIL_WIDTH } from '../../components/CustomTabBar';
 import { useOrientation } from '../../hooks/useOrientation';
 import { useSettingsStore } from '../../stores/useSettingsStore';
 
@@ -10,27 +10,35 @@ export default function TabLayout() {
   const tabRailSide = useSettingsStore((s) => s.tabRailSide);
   const insets = useSafeAreaInsets();
 
-  const contentStyle = isLandscape
-    ? {
-        flex: 1 as const,
-        ...(tabRailSide === 'left'
-          ? { marginLeft: RAIL_WIDTH + insets.left }
-          : { marginRight: RAIL_WIDTH + insets.right }),
-      }
-    : { flex: 1 as const };
+  if (isLandscape) {
+    const isLeft = tabRailSide === 'left';
+    return (
+      <View style={{ flex: 1, flexDirection: isLeft ? 'row' : 'row-reverse' }}>
+        <LandscapeTabRail />
+        <View style={{ flex: 1 }}>
+          <Tabs
+            tabBar={() => <View />}
+            screenOptions={{ headerShown: false }}
+          >
+            <Tabs.Screen name="index" />
+            <Tabs.Screen name="control" />
+            <Tabs.Screen name="settings" />
+          </Tabs>
+        </View>
+      </View>
+    );
+  }
 
   return (
-    <View style={contentStyle}>
-      <Tabs
-        tabBar={(props) => <CustomTabBar {...props} />}
-        screenOptions={{
-          headerShown: false,
-        }}
-      >
-        <Tabs.Screen name="index" />
-        <Tabs.Screen name="control" />
-        <Tabs.Screen name="settings" />
-      </Tabs>
-    </View>
+    <Tabs
+      tabBar={(props) => <CustomTabBar {...props} />}
+      screenOptions={{
+        headerShown: false,
+      }}
+    >
+      <Tabs.Screen name="index" />
+      <Tabs.Screen name="control" />
+      <Tabs.Screen name="settings" />
+    </Tabs>
   );
 }

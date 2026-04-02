@@ -17,6 +17,7 @@ import { theme } from "../../constants/theme";
 import { suggestLayout, type TopicSuggestion } from "../../lib/topic-detection";
 import { useLayoutStore } from "../../stores/useLayoutStore";
 import { useOnboardingStore } from "../../stores/useOnboardingStore";
+import { useOrientation } from "../../hooks/useOrientation";
 import { useRosStore } from "../../stores/useRosStore";
 import { useSettingsStore } from "../../stores/useSettingsStore";
 
@@ -125,6 +126,7 @@ export default function ControlScreen() {
   const disconnect = useRosStore((s) => s.disconnect);
   const initForRobot = useLayoutStore((s) => s.initForRobot);
   const router = useRouter();
+  const { isLandscape } = useOrientation();
   const isDemo = url?.startsWith("demo://");
 
   const [suggestion, setSuggestion] = useState<TopicSuggestion | null>(null);
@@ -206,11 +208,13 @@ export default function ControlScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={["top"]}>
-      <View style={styles.topBar}>
-        <ConnectionDot />
-        <LayoutManager />
-      </View>
+    <SafeAreaView style={styles.container} edges={isLandscape ? [] : ["top"]}>
+      {!isLandscape && (
+        <View style={styles.topBar}>
+          <ConnectionDot />
+          <LayoutManager />
+        </View>
+      )}
 
       {isDemo && status === "connected" && (
         <TouchableOpacity style={styles.demoBanner} onPress={handleExitDemo}>

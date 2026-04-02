@@ -18,6 +18,7 @@ import { useLayoutStore } from '../../stores/useLayoutStore';
 import { usePresetsStore } from '../../stores/usePresetsStore';
 import { useOnboardingStore } from '../../stores/useOnboardingStore';
 import { SetupGuide } from '../../components/SetupGuide';
+import { useOrientation } from '../../hooks/useOrientation';
 import { theme } from '../../constants/theme';
 
 const PUBLISH_RATE_OPTIONS = [5, 10, 20, 30];
@@ -116,204 +117,232 @@ export default function SettingsScreen() {
     );
   };
 
-  return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+  const { isLandscape } = useOrientation();
 
-        <Text style={styles.sectionTitle}>PREFERENCES</Text>
-        <View style={styles.card}>
-          <View style={styles.toggleRow}>
-            <View style={styles.toggleLabel}>
-              <Text style={styles.rowTitle}>Haptics</Text>
-            </View>
-            <Switch
-              value={hapticsEnabled}
-              onValueChange={setHapticsEnabled}
-              trackColor={{ false: theme.colors.borderSubtle, true: theme.colors.accentPrimary }}
-              thumbColor={theme.colors.textPrimary}
-            />
+  const preferencesSection = (
+    <>
+      <Text style={styles.sectionTitle}>PREFERENCES</Text>
+      <View style={styles.card}>
+        <View style={styles.toggleRow}>
+          <View style={styles.toggleLabel}>
+            <Text style={styles.rowTitle}>Haptics</Text>
           </View>
-          <View style={styles.divider} />
-          <View style={styles.toggleRow}>
-            <View style={styles.toggleLabel}>
-              <Text style={styles.rowTitle}>Keep Screen Awake</Text>
-              <Text style={styles.rowSubtitle}>Prevents dimming while connected</Text>
-            </View>
-            <Switch
-              value={keepAwake}
-              onValueChange={setKeepAwake}
-              trackColor={{ false: theme.colors.borderSubtle, true: theme.colors.accentPrimary }}
-              thumbColor={theme.colors.textPrimary}
-            />
-          </View>
-          <View style={styles.divider} />
-          <View style={styles.toggleRow}>
-            <View style={styles.toggleLabel}>
-              <Text style={styles.rowTitle}>Auto-detect Topics</Text>
-              <Text style={styles.rowSubtitle}>Automatically discover and subscribe to topics</Text>
-            </View>
-            <Switch
-              value={autoDetectTopics}
-              onValueChange={setAutoDetectTopics}
-              trackColor={{ false: theme.colors.borderSubtle, true: theme.colors.accentPrimary }}
-              thumbColor={theme.colors.textPrimary}
-            />
-          </View>
-          <View style={styles.divider} />
-          <Text style={styles.rowTitle}>Tab Bar Side (Landscape)</Text>
-          <Text style={styles.rowSubtitle}>Which side the tab rail appears on in landscape mode</Text>
-          <View style={styles.segmentedRow}>
-            {(['left', 'right'] as const).map((side) => (
-              <TouchableOpacity
-                key={side}
-                style={[
-                  styles.segmentButton,
-                  tabRailSide === side && styles.segmentButtonActive,
-                ]}
-                onPress={() => setTabRailSide(side)}
-              >
-                <Text
-                  style={[
-                    styles.segmentText,
-                    tabRailSide === side && styles.segmentTextActive,
-                  ]}
-                >
-                  {side.charAt(0).toUpperCase() + side.slice(1)}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+          <Switch
+            value={hapticsEnabled}
+            onValueChange={setHapticsEnabled}
+            trackColor={{ false: theme.colors.borderSubtle, true: theme.colors.accentPrimary }}
+            thumbColor={theme.colors.textPrimary}
+          />
         </View>
-
-        <Text style={styles.sectionTitle}>CONTROL</Text>
-        <View style={styles.card}>
-          <Text style={styles.rowTitle}>Joystick Publish Rate</Text>
-          <Text style={styles.rowSubtitle}>How often commands are sent to the robot</Text>
-          <View style={styles.segmentedRow}>
-            {PUBLISH_RATE_OPTIONS.map((rate) => (
-              <TouchableOpacity
-                key={rate}
-                style={[
-                  styles.segmentButton,
-                  publishRateHz === rate && styles.segmentButtonActive,
-                ]}
-                onPress={() => setPublishRateHz(rate)}
-              >
-                <Text
-                  style={[
-                    styles.segmentText,
-                    publishRateHz === rate && styles.segmentTextActive,
-                  ]}
-                >
-                  {rate} Hz
-                </Text>
-              </TouchableOpacity>
-            ))}
+        <View style={styles.divider} />
+        <View style={styles.toggleRow}>
+          <View style={styles.toggleLabel}>
+            <Text style={styles.rowTitle}>Keep Screen Awake</Text>
+            <Text style={styles.rowSubtitle}>Prevents dimming while connected</Text>
           </View>
+          <Switch
+            value={keepAwake}
+            onValueChange={setKeepAwake}
+            trackColor={{ false: theme.colors.borderSubtle, true: theme.colors.accentPrimary }}
+            thumbColor={theme.colors.textPrimary}
+          />
         </View>
-
-        <Text style={styles.sectionTitle}>FIELD PICKER</Text>
-        <View style={styles.card}>
-          <Text style={styles.rowTitle}>Max Nesting Depth</Text>
-          <Text style={styles.rowSubtitle}>How deep to traverse message fields</Text>
-          <View style={styles.segmentedRow}>
-            {DEPTH_OPTIONS.map((d) => (
-              <TouchableOpacity
-                key={d}
-                style={[
-                  styles.segmentButton,
-                  fieldPickerDepth === d && styles.segmentButtonActive,
-                ]}
-                onPress={() => setFieldPickerDepth(d)}
-              >
-                <Text
-                  style={[
-                    styles.segmentText,
-                    fieldPickerDepth === d && styles.segmentTextActive,
-                  ]}
-                >
-                  {d}
-                </Text>
-              </TouchableOpacity>
-            ))}
+        <View style={styles.divider} />
+        <View style={styles.toggleRow}>
+          <View style={styles.toggleLabel}>
+            <Text style={styles.rowTitle}>Auto-detect Topics</Text>
+            <Text style={styles.rowSubtitle}>Automatically discover and subscribe to topics</Text>
           </View>
-          <View style={styles.divider} />
-          <Text style={styles.rowTitle}>Array Element Limit</Text>
-          <Text style={styles.rowSubtitle}>Max array elements to scan per level</Text>
-          <View style={styles.segmentedRow}>
-            {ARRAY_LIMIT_OPTIONS.map((n) => (
-              <TouchableOpacity
-                key={n}
+          <Switch
+            value={autoDetectTopics}
+            onValueChange={setAutoDetectTopics}
+            trackColor={{ false: theme.colors.borderSubtle, true: theme.colors.accentPrimary }}
+            thumbColor={theme.colors.textPrimary}
+          />
+        </View>
+        <View style={styles.divider} />
+        <Text style={styles.rowTitle}>Tab Bar Side (Landscape)</Text>
+        <Text style={styles.rowSubtitle}>Which side the tab rail appears on in landscape mode</Text>
+        <View style={styles.segmentedRow}>
+          {(['left', 'right'] as const).map((side) => (
+            <TouchableOpacity
+              key={side}
+              style={[
+                styles.segmentButton,
+                tabRailSide === side && styles.segmentButtonActive,
+              ]}
+              onPress={() => setTabRailSide(side)}
+            >
+              <Text
                 style={[
-                  styles.segmentButton,
-                  fieldPickerArrayLimit === n && styles.segmentButtonActive,
+                  styles.segmentText,
+                  tabRailSide === side && styles.segmentTextActive,
                 ]}
-                onPress={() => setFieldPickerArrayLimit(n)}
               >
-                <Text
-                  style={[
-                    styles.segmentText,
-                    fieldPickerArrayLimit === n && styles.segmentTextActive,
-                  ]}
-                >
-                  {n}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        <Text style={styles.sectionTitle}>DATA</Text>
-        <View style={styles.card}>
-          <TouchableOpacity
-            style={[styles.actionRow, !robotUrl && styles.actionRowDisabled]}
-            onPress={handleResetLayouts}
-            disabled={!robotUrl}
-          >
-            <Ionicons
-              name="refresh-outline"
-              size={16}
-              color={robotUrl ? theme.colors.statusError : theme.colors.textMuted}
-            />
-            <Text style={[styles.actionText, styles.actionTextDestructive, !robotUrl && styles.actionTextDisabled]}>
-              Reset Layouts for This Robot
-            </Text>
-          </TouchableOpacity>
-          <View style={styles.divider} />
-          <TouchableOpacity style={styles.actionRow} onPress={handleClearConnections}>
-            <Ionicons name="wifi-outline" size={16} color={theme.colors.statusError} />
-            <Text style={[styles.actionText, styles.actionTextDestructive]}>
-              Clear Saved Connections
-            </Text>
-          </TouchableOpacity>
-          <View style={styles.divider} />
-          <TouchableOpacity style={styles.actionRow} onPress={handleResetAll}>
-            <Ionicons name="trash-outline" size={16} color={theme.colors.statusError} />
-            <Text style={[styles.actionText, styles.actionTextDestructive]}>
-              Reset All App Data
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        <Text style={styles.sectionTitle}>ABOUT</Text>
-        <View style={styles.card}>
-          <View style={styles.infoRow}>
-            <Text style={styles.label}>Version</Text>
-            <Text style={styles.value}>
-              {Constants.expoConfig?.version || '1.0.0'}
-              {' '}
-              <Text style={styles.buildNumber}>
-                ({Constants.expoConfig?.android?.versionCode ?? Constants.expoConfig?.ios?.buildNumber ?? '?'})
+                {side.charAt(0).toUpperCase() + side.slice(1)}
               </Text>
-            </Text>
-          </View>
-          <TouchableOpacity style={styles.actionRow} onPress={() => setShowGuide(true)}>
-            <Ionicons name="book-outline" size={16} color={theme.colors.accentPrimary} />
-            <Text style={styles.actionText}>Setup Guide</Text>
-          </TouchableOpacity>
+            </TouchableOpacity>
+          ))}
         </View>
+      </View>
 
-      </ScrollView>
+      <Text style={styles.sectionTitle}>CONTROL</Text>
+      <View style={styles.card}>
+        <Text style={styles.rowTitle}>Joystick Publish Rate</Text>
+        <Text style={styles.rowSubtitle}>How often commands are sent to the robot</Text>
+        <View style={styles.segmentedRow}>
+          {PUBLISH_RATE_OPTIONS.map((rate) => (
+            <TouchableOpacity
+              key={rate}
+              style={[
+                styles.segmentButton,
+                publishRateHz === rate && styles.segmentButtonActive,
+              ]}
+              onPress={() => setPublishRateHz(rate)}
+            >
+              <Text
+                style={[
+                  styles.segmentText,
+                  publishRateHz === rate && styles.segmentTextActive,
+                ]}
+              >
+                {rate} Hz
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+    </>
+  );
+
+  const fieldPickerSection = (
+    <>
+      <Text style={styles.sectionTitle}>FIELD PICKER</Text>
+      <View style={styles.card}>
+        <Text style={styles.rowTitle}>Max Nesting Depth</Text>
+        <Text style={styles.rowSubtitle}>How deep to traverse message fields</Text>
+        <View style={styles.segmentedRow}>
+          {DEPTH_OPTIONS.map((d) => (
+            <TouchableOpacity
+              key={d}
+              style={[
+                styles.segmentButton,
+                fieldPickerDepth === d && styles.segmentButtonActive,
+              ]}
+              onPress={() => setFieldPickerDepth(d)}
+            >
+              <Text
+                style={[
+                  styles.segmentText,
+                  fieldPickerDepth === d && styles.segmentTextActive,
+                ]}
+              >
+                {d}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <View style={styles.divider} />
+        <Text style={styles.rowTitle}>Array Element Limit</Text>
+        <Text style={styles.rowSubtitle}>Max array elements to scan per level</Text>
+        <View style={styles.segmentedRow}>
+          {ARRAY_LIMIT_OPTIONS.map((n) => (
+            <TouchableOpacity
+              key={n}
+              style={[
+                styles.segmentButton,
+                fieldPickerArrayLimit === n && styles.segmentButtonActive,
+              ]}
+              onPress={() => setFieldPickerArrayLimit(n)}
+            >
+              <Text
+                style={[
+                  styles.segmentText,
+                  fieldPickerArrayLimit === n && styles.segmentTextActive,
+                ]}
+              >
+                {n}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+    </>
+  );
+
+  const dataSection = (
+    <>
+      <Text style={styles.sectionTitle}>DATA</Text>
+      <View style={styles.card}>
+        <TouchableOpacity
+          style={[styles.actionRow, !robotUrl && styles.actionRowDisabled]}
+          onPress={handleResetLayouts}
+          disabled={!robotUrl}
+        >
+          <Ionicons
+            name="refresh-outline"
+            size={16}
+            color={robotUrl ? theme.colors.statusError : theme.colors.textMuted}
+          />
+          <Text style={[styles.actionText, styles.actionTextDestructive, !robotUrl && styles.actionTextDisabled]}>
+            Reset Layouts for This Robot
+          </Text>
+        </TouchableOpacity>
+        <View style={styles.divider} />
+        <TouchableOpacity style={styles.actionRow} onPress={handleClearConnections}>
+          <Ionicons name="wifi-outline" size={16} color={theme.colors.statusError} />
+          <Text style={[styles.actionText, styles.actionTextDestructive]}>
+            Clear Saved Connections
+          </Text>
+        </TouchableOpacity>
+        <View style={styles.divider} />
+        <TouchableOpacity style={styles.actionRow} onPress={handleResetAll}>
+          <Ionicons name="trash-outline" size={16} color={theme.colors.statusError} />
+          <Text style={[styles.actionText, styles.actionTextDestructive]}>
+            Reset All App Data
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      <Text style={styles.sectionTitle}>ABOUT</Text>
+      <View style={styles.card}>
+        <View style={styles.infoRow}>
+          <Text style={styles.label}>Version</Text>
+          <Text style={styles.value}>
+            {Constants.expoConfig?.version || '1.0.0'}
+            {' '}
+            <Text style={styles.buildNumber}>
+              ({Constants.expoConfig?.android?.versionCode ?? Constants.expoConfig?.ios?.buildNumber ?? '?'})
+            </Text>
+          </Text>
+        </View>
+        <TouchableOpacity style={styles.actionRow} onPress={() => setShowGuide(true)}>
+          <Ionicons name="book-outline" size={16} color={theme.colors.accentPrimary} />
+          <Text style={styles.actionText}>Setup Guide</Text>
+        </TouchableOpacity>
+      </View>
+    </>
+  );
+
+  return (
+    <SafeAreaView style={styles.container} edges={isLandscape ? [] : ['top']}>
+      {isLandscape ? (
+        <View style={styles.landscapeRow}>
+          <ScrollView style={styles.landscapeColumn} contentContainerStyle={styles.landscapeColumnContent}>
+            {preferencesSection}
+          </ScrollView>
+          <ScrollView style={styles.landscapeColumn} contentContainerStyle={styles.landscapeColumnContent}>
+            {fieldPickerSection}
+            {dataSection}
+          </ScrollView>
+        </View>
+      ) : (
+        <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+          {preferencesSection}
+          {fieldPickerSection}
+          {dataSection}
+        </ScrollView>
+      )}
       <SetupGuide visible={showGuide} onClose={() => setShowGuide(false)} />
     </SafeAreaView>
   );
@@ -329,6 +358,17 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: 100,
+  },
+  landscapeRow: {
+    flex: 1,
+    flexDirection: 'row',
+  },
+  landscapeColumn: {
+    flex: 1,
+    padding: 16,
+  },
+  landscapeColumnContent: {
+    paddingBottom: 40,
   },
   sectionTitle: {
     ...theme.typography.label,
