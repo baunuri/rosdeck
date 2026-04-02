@@ -38,16 +38,9 @@ export function suggestLayout(topics: TopicInfo[]): TopicSuggestion | null {
     }
   }
 
-  // Camera: handled separately so we can pick CompressedImage over raw Image.
-  // Priority: 1) any CompressedImage topic  2) <rawTopic>/compressed variant
-  // 3) raw Image topic as last resort (transport mode will show a hint to remap)
-  const compressedTopic = topics.find((t) => /CompressedImage/.test(t.type));
-  const rawImageTopic = topics.find((t) => /\bImage\b/.test(t.type) && !/Compressed/.test(t.type));
-  const rawCompressedVariant = rawImageTopic
-    ? topics.find((t) => t.name === rawImageTopic.name + '/compressed')
-    : undefined;
-
-  const cameraTopic = compressedTopic ?? rawCompressedVariant ?? rawImageTopic;
+  // Camera: only use CompressedImage topics. Raw Image is never processed
+  // (multi-MB frames would flood the websocket and freeze the app).
+  const cameraTopic = topics.find((t) => /CompressedImage/.test(t.type));
   if (cameraTopic) {
     detected.push({ name: cameraTopic.name, type: cameraTopic.type, widgetType: 'camera' });
     widgetConfigs.camera = { topic: cameraTopic.name, source: 'transport' };

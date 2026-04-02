@@ -53,7 +53,7 @@ export const PRESET_TEMPLATES: PresetTemplate[] = [
           0.6
         ),
         createSplitNode('vertical',
-          createWidgetNode('camera', { topic: '/camera/image_raw', source: 'transport', mjpegPort: DEFAULTS.mjpegPort }),
+          createWidgetNode('camera', { topic: '/camera/image_raw/compressed', source: 'transport', mjpegPort: DEFAULTS.mjpegPort }),
           createSplitNode('vertical',
             createWidgetNode('chart', {
               series: [

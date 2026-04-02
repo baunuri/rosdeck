@@ -3,7 +3,7 @@ export const DEFAULTS = {
   foxglovePort: 8765,
   mjpegPort: 8080,
   cmdVelTopic: '/cmd_vel',
-  cameraTopic: '/camera/image_raw',
+  cameraTopic: '/camera/image_raw/compressed',
   maxLinearVel: 0.5,
   maxAngularVel: 1.0,
   publishRateHz: 10,

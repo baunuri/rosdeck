@@ -8,7 +8,7 @@ import type {
 
 const DEMO_TOPICS: TopicInfo[] = [
   { name: "/cmd_vel", type: "geometry_msgs/msg/Twist" },
-  { name: "/camera/image_raw", type: "sensor_msgs/msg/Image" },
+  { name: "/camera/image_raw/compressed", type: "sensor_msgs/msg/CompressedImage" },
   { name: "/map", type: "nav_msgs/msg/OccupancyGrid" },
   { name: "/diagnostics", type: "diagnostic_msgs/msg/DiagnosticArray" },
   { name: "/scan", type: "sensor_msgs/msg/LaserScan" },
@@ -190,12 +190,10 @@ export class DemoTransport implements Transport {
             .fill(0)
             .map((_, i) => 2 + Math.sin(i * 0.1)),
         };
-      case "/camera/image_raw":
+      case "/camera/image_raw/compressed":
         return {
-          width: 320,
-          height: 240,
-          encoding: "rgb8",
-          data: Array(320 * 240 * 3).fill(128),
+          format: "jpeg",
+          data: "",
         };
       case "/battery_state": {
         const t2 = Date.now() / 1000;

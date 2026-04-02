@@ -7,7 +7,7 @@ export const cameraWidget: WidgetDefinition = {
   name: 'Camera',
   icon: 'videocam-outline',
   category: 'sensor',
-  supportedMessageTypes: ['sensor_msgs/msg/CompressedImage', 'sensor_msgs/msg/Image'],
+  supportedMessageTypes: ['sensor_msgs/msg/CompressedImage'],
   defaultConfig: {
     topic: DEFAULTS.cameraTopic,
     source: 'transport',
@@ -28,7 +28,7 @@ export const cameraWidget: WidgetDefinition = {
       key: 'topic',
       label: 'Camera Topic',
       type: 'topic',
-      topicMessageTypes: ['sensor_msgs/msg/CompressedImage', 'sensor_msgs/msg/Image'],
+      topicMessageTypes: ['sensor_msgs/msg/CompressedImage'],
       visibleWhen: { key: 'source', value: 'mjpeg' },
     },
     {

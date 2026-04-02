@@ -33,7 +33,7 @@ describe('DemoTransport', () => {
     expect(topics.length).toBeGreaterThan(0);
     const names = topics.map((t) => t.name);
     expect(names).toContain('/cmd_vel');
-    expect(names).toContain('/camera/image_raw');
+    expect(names).toContain('/camera/image_raw/compressed');
     expect(names).toContain('/map');
   });
 
