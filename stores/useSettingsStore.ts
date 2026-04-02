@@ -10,6 +10,7 @@ interface SettingsState {
   autoDetectTopics: boolean;
   fieldPickerDepth: number;
   fieldPickerArrayLimit: number;
+  tabRailSide: 'left' | 'right';
   loaded: boolean;
   load: () => Promise<void>;
   setHapticsEnabled: (value: boolean) => void;
@@ -18,6 +19,7 @@ interface SettingsState {
   setAutoDetectTopics: (value: boolean) => void;
   setFieldPickerDepth: (value: number) => void;
   setFieldPickerArrayLimit: (value: number) => void;
+  setTabRailSide: (value: 'left' | 'right') => void;
 }
 
 const defaults = {
@@ -27,6 +29,7 @@ const defaults = {
   autoDetectTopics: true,
   fieldPickerDepth: 8,
   fieldPickerArrayLimit: 32,
+  tabRailSide: 'left' as const,
 };
 
 function persistAll(get: () => SettingsState) {
@@ -65,4 +68,5 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setAutoDetectTopics: (value) => { set({ autoDetectTopics: value }); persistAll(get); },
   setFieldPickerDepth: (value) => { set({ fieldPickerDepth: value }); persistAll(get); },
   setFieldPickerArrayLimit: (value) => { set({ fieldPickerArrayLimit: value }); persistAll(get); },
+  setTabRailSide: (value) => { set({ tabRailSide: value }); persistAll(get); },
 }));
