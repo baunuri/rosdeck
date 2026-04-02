@@ -22,6 +22,15 @@ const _entries = new Map<string, DispatchEntry>();
 // touchIdentifier → { entryId, startX, startY }
 const _active = new Map<number, { id: string; startX: number; startY: number }>();
 
+// Optional delta transform for landscape rotation.
+// Transforms screen-space deltas to widget-space deltas.
+type DeltaTransform = (dx: number, dy: number) => { dx: number; dy: number };
+let _deltaTransform: DeltaTransform = (dx, dy) => ({ dx, dy });
+
+export function setDeltaTransform(fn: DeltaTransform) {
+  _deltaTransform = fn;
+}
+
 export function registerTouchEntry(id: string, entry: DispatchEntry) {
   _entries.set(id, entry);
 }
@@ -66,7 +75,10 @@ export function dispatchTouchMove(changedTouches: any[]) {
     if (!active) continue;
     const entry = _entries.get(active.id);
     if (!entry) continue;
-    entry.onTouchMove(touch.identifier, touch.pageX - active.startX, touch.pageY - active.startY);
+    const rawDx = touch.pageX - active.startX;
+    const rawDy = touch.pageY - active.startY;
+    const { dx, dy } = _deltaTransform(rawDx, rawDy);
+    entry.onTouchMove(touch.identifier, dx, dy);
   }
 }
 

@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { View, StyleSheet } from 'react-native';
 import type { LayoutNode } from '../types/layout';
 import { getWidget } from '../widgets/registry';
@@ -8,7 +8,7 @@ import { LayoutEditor } from './LayoutEditor';
 import { WidgetContentWrapper } from './WidgetContentWrapper';
 import { useOrientation } from '../hooks/useOrientation';
 import { theme } from '../constants/theme';
-import { dispatchTouchStart, dispatchTouchMove, dispatchTouchEnd } from '../lib/touch-dispatcher';
+import { dispatchTouchStart, dispatchTouchMove, dispatchTouchEnd, setDeltaTransform } from '../lib/touch-dispatcher';
 
 export function remapTouchToPortrait(
   lx: number, ly: number, isLandscape: boolean, containerWidth: number
@@ -128,28 +128,25 @@ export function LayoutRenderer() {
   const [size, setSize] = React.useState({ width: 0, height: 0 });
   const { isLandscape } = useOrientation();
 
-  const isLandscapeRef = useRef(false);
-  const portraitWidthRef = useRef(0);
-
+  // Set delta transform for landscape touch remapping.
+  // In landscape, the grid is rotated -90deg, so screen-space deltas (dx, dy)
+  // map to portrait-space as (dy, -dx).
+  // Hit-testing uses raw screen coords (widget bounds from .measure() are screen-space).
+  // Only deltas delivered to widget callbacks need remapping.
   useEffect(() => {
-    isLandscapeRef.current = isLandscape;
-    portraitWidthRef.current = size.height; // landscape short dim = portrait width
-  }, [isLandscape, size.height]);
+    if (isLandscape) {
+      setDeltaTransform((dx, dy) => ({ dx: dy, dy: -dx }));
+    } else {
+      setDeltaTransform((dx, dy) => ({ dx, dy }));
+    }
+    return () => setDeltaTransform((dx, dy) => ({ dx, dy }));
+  }, [isLandscape]);
 
   if (!layout) return null;
 
   // In landscape, swap dimensions so grid renders in portrait proportions
   const gridWidth = isLandscape ? size.height : size.width;
   const gridHeight = isLandscape ? size.width : size.height;
-
-  const remapTouches = (touches: any[]) =>
-    touches.map((t) => {
-      if (isLandscapeRef.current) {
-        const { px, py } = remapTouchToPortrait(t.pageX, t.pageY, true, portraitWidthRef.current);
-        return { ...t, pageX: px, pageY: py };
-      }
-      return t;
-    });
 
   return (
     <View
@@ -158,10 +155,10 @@ export function LayoutRenderer() {
         const { width, height } = e.nativeEvent.layout;
         setSize({ width, height });
       }}
-      onTouchStart={(e) => dispatchTouchStart(remapTouches([...e.nativeEvent.changedTouches]))}
-      onTouchMove={(e) => dispatchTouchMove(remapTouches([...e.nativeEvent.changedTouches]))}
-      onTouchEnd={(e) => dispatchTouchEnd(remapTouches([...e.nativeEvent.changedTouches]))}
-      onTouchCancel={(e) => dispatchTouchEnd(remapTouches([...e.nativeEvent.changedTouches]))}
+      onTouchStart={(e) => dispatchTouchStart([...e.nativeEvent.changedTouches])}
+      onTouchMove={(e) => dispatchTouchMove([...e.nativeEvent.changedTouches])}
+      onTouchEnd={(e) => dispatchTouchEnd([...e.nativeEvent.changedTouches])}
+      onTouchCancel={(e) => dispatchTouchEnd([...e.nativeEvent.changedTouches])}
     >
       {size.width > 0 && size.height > 0 && (
         isLandscape ? (
