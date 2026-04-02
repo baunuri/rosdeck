@@ -37,6 +37,8 @@ export default function SettingsScreen() {
   const setAutoDetectTopics = useSettingsStore((s) => s.setAutoDetectTopics);
   const setFieldPickerDepth = useSettingsStore((s) => s.setFieldPickerDepth);
   const setFieldPickerArrayLimit = useSettingsStore((s) => s.setFieldPickerArrayLimit);
+  const tabRailSide = useSettingsStore((s) => s.tabRailSide);
+  const setTabRailSide = useSettingsStore((s) => s.setTabRailSide);
 
   const robotUrl = useLayoutStore((s) => s.robotUrl);
   const [showGuide, setShowGuide] = React.useState(false);
@@ -107,7 +109,7 @@ export default function SettingsScreen() {
             useLayoutStore.getState().reset();
             usePresetsStore.setState({ presets: [], loaded: false });
             useOnboardingStore.getState().reset();
-            useSettingsStore.setState({ hapticsEnabled: true, keepAwake: true, publishRateHz: 10, autoDetectTopics: true, loaded: false });
+            useSettingsStore.setState({ hapticsEnabled: true, keepAwake: true, publishRateHz: 10, autoDetectTopics: true, tabRailSide: 'left', loaded: false });
           },
         },
       ],
@@ -156,6 +158,30 @@ export default function SettingsScreen() {
               trackColor={{ false: theme.colors.borderSubtle, true: theme.colors.accentPrimary }}
               thumbColor={theme.colors.textPrimary}
             />
+          </View>
+          <View style={styles.divider} />
+          <Text style={styles.rowTitle}>Tab Bar Side (Landscape)</Text>
+          <Text style={styles.rowSubtitle}>Which side the tab rail appears on in landscape mode</Text>
+          <View style={styles.segmentedRow}>
+            {(['left', 'right'] as const).map((side) => (
+              <TouchableOpacity
+                key={side}
+                style={[
+                  styles.segmentButton,
+                  tabRailSide === side && styles.segmentButtonActive,
+                ]}
+                onPress={() => setTabRailSide(side)}
+              >
+                <Text
+                  style={[
+                    styles.segmentText,
+                    tabRailSide === side && styles.segmentTextActive,
+                  ]}
+                >
+                  {side.charAt(0).toUpperCase() + side.slice(1)}
+                </Text>
+              </TouchableOpacity>
+            ))}
           </View>
         </View>
 
