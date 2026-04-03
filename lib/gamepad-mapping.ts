@@ -36,8 +36,13 @@ export function applyDeadzone(value: number, deadzone: number): number {
   return Math.sign(value) * rescaled;
 }
 
-/** Resolve auto/manual stick mappings for a list of joystick widgets */
-export function resolveStickMappings(widgets: JoystickWidgetInfo[]): StickMapping[] {
+/** Resolve auto/manual stick mappings for a list of joystick widgets.
+ *  autoLayout controls split-stick mode: 'left-drive' = left stick forward/back,
+ *  'left-steer' = left stick steering. */
+export function resolveStickMappings(
+  widgets: JoystickWidgetInfo[],
+  autoLayout: 'left-drive' | 'left-steer' = 'left-drive',
+): StickMapping[] {
   return widgets.map((w, i) => {
     const setting: string = w.config.gamepadStick ?? 'auto';
 
@@ -53,8 +58,12 @@ export function resolveStickMappings(widgets: JoystickWidgetInfo[]): StickMappin
 
     // Auto mapping
     if (widgets.length === 1) {
-      // Split-stick: left stick for forward/back (Y axis), right stick for steering (X axis)
-      return { ...w, xStick: 'right', yStick: 'left' };
+      // Split-stick: each physical stick drives one widget axis
+      if (autoLayout === 'left-drive') {
+        return { ...w, xStick: 'right', yStick: 'left' };
+      } else {
+        return { ...w, xStick: 'left', yStick: 'right' };
+      }
     }
     if (i === 0) return { ...w, xStick: 'left', yStick: 'left' };
     if (i === 1) return { ...w, xStick: 'right', yStick: 'right' };

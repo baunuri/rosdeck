@@ -37,15 +37,15 @@ export function useGamepadInput() {
         return;
       }
       const widgets = collectJoystickWidgets(tree);
-      const resolved = resolveStickMappings(widgets);
+      const autoLayout = useSettingsStore.getState().gamepadAutoLayout;
+      const resolved = resolveStickMappings(widgets, autoLayout);
       mappingsRef.current = resolved;
 
       // Write resolved mappings to store so Joystick widgets can read their badge
-      const mappingRecord: Record<string, 'left' | 'right' | 'none'> = {};
+      const mappingRecord: Record<string, 'left' | 'right' | 'split' | 'none'> = {};
       for (const m of resolved) {
-        // For split-stick (1 widget), show 'left' since both sticks are used
         mappingRecord[m.nodeId] = m.xStick === 'none' && m.yStick === 'none' ? 'none'
-          : m.xStick !== m.yStick ? 'left' // split-stick mode
+          : m.xStick !== m.yStick ? 'split'
           : m.xStick;
       }
       useGamepadStore.getState().setResolvedMappings(mappingRecord);

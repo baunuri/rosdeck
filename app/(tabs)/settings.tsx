@@ -43,6 +43,8 @@ export default function SettingsScreen() {
   const setTabRailSide = useSettingsStore((s) => s.setTabRailSide);
   const gamepadDeadzone = useSettingsStore((s) => s.gamepadDeadzone);
   const setGamepadDeadzone = useSettingsStore((s) => s.setGamepadDeadzone);
+  const gamepadAutoLayout = useSettingsStore((s) => s.gamepadAutoLayout);
+  const setGamepadAutoLayout = useSettingsStore((s) => s.setGamepadAutoLayout);
 
   const robotUrl = useLayoutStore((s) => s.robotUrl);
   const [showGuide, setShowGuide] = React.useState(false);
@@ -218,6 +220,33 @@ export default function SettingsScreen() {
 
       <Text style={styles.sectionTitle}>GAMEPAD</Text>
       <View style={styles.card}>
+        <Text style={styles.rowTitle}>Auto Stick Layout</Text>
+        <Text style={styles.rowSubtitle}>Which stick does what when a single joystick widget is used</Text>
+        <View style={styles.segmentedRow}>
+          {([
+            { value: 'left-drive' as const, label: 'L Drive · R Steer' },
+            { value: 'left-steer' as const, label: 'L Steer · R Drive' },
+          ]).map(({ value, label }) => (
+            <TouchableOpacity
+              key={value}
+              style={[
+                styles.segmentButton,
+                gamepadAutoLayout === value && styles.segmentButtonActive,
+              ]}
+              onPress={() => setGamepadAutoLayout(value)}
+            >
+              <Text
+                style={[
+                  styles.segmentText,
+                  gamepadAutoLayout === value && styles.segmentTextActive,
+                ]}
+              >
+                {label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <View style={styles.divider} />
         <Text style={styles.rowTitle}>Stick Deadzone</Text>
         <Text style={styles.rowSubtitle}>Ignore small stick movements (noise filtering)</Text>
         <View style={styles.segmentedRow}>

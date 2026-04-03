@@ -4,9 +4,9 @@ interface GamepadState {
   connected: boolean;
   controllerName: string;
   /** Maps widget node ID → resolved stick assignment. Written by useGamepadInput. */
-  resolvedMappings: Record<string, 'left' | 'right' | 'none'>;
+  resolvedMappings: Record<string, 'left' | 'right' | 'split' | 'none'>;
   setConnected: (connected: boolean, name: string) => void;
-  setResolvedMappings: (mappings: Record<string, 'left' | 'right' | 'none'>) => void;
+  setResolvedMappings: (mappings: Record<string, 'left' | 'right' | 'split' | 'none'>) => void;
 }
 
 export const useGamepadStore = create<GamepadState>((set) => ({

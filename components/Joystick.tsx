@@ -71,7 +71,8 @@ export function Joystick(props?: Partial<WidgetProps>) {
   const nodeId = props?.nodeId;
   const resolvedStick = useGamepadStore((s) => nodeId ? s.resolvedMappings[nodeId] : undefined);
   const stickLabel = gamepadConnected && resolvedStick && resolvedStick !== 'none'
-    ? resolvedStick === 'left' ? 'L' : 'R'
+    ? resolvedStick === 'split' ? 'L+R'
+      : resolvedStick === 'left' ? 'L' : 'R'
     : null;
 
   useEffect(() => {

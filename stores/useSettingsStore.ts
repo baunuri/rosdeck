@@ -12,6 +12,7 @@ interface SettingsState {
   fieldPickerArrayLimit: number;
   tabRailSide: 'left' | 'right';
   gamepadDeadzone: number;
+  gamepadAutoLayout: 'left-drive' | 'left-steer';
   loaded: boolean;
   load: () => Promise<void>;
   setHapticsEnabled: (value: boolean) => void;
@@ -22,6 +23,7 @@ interface SettingsState {
   setFieldPickerArrayLimit: (value: number) => void;
   setTabRailSide: (value: 'left' | 'right') => void;
   setGamepadDeadzone: (value: number) => void;
+  setGamepadAutoLayout: (value: 'left-drive' | 'left-steer') => void;
 }
 
 const defaults = {
@@ -33,6 +35,7 @@ const defaults = {
   fieldPickerArrayLimit: 32,
   tabRailSide: 'left' as const,
   gamepadDeadzone: 0.1,
+  gamepadAutoLayout: 'left-drive' as const,
 };
 
 function persistAll(get: () => SettingsState) {
@@ -73,4 +76,5 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setFieldPickerArrayLimit: (value) => { set({ fieldPickerArrayLimit: value }); persistAll(get); },
   setTabRailSide: (value) => { set({ tabRailSide: value }); persistAll(get); },
   setGamepadDeadzone: (value) => { set({ gamepadDeadzone: value }); persistAll(get); },
+  setGamepadAutoLayout: (value) => { set({ gamepadAutoLayout: value }); persistAll(get); },
 }));

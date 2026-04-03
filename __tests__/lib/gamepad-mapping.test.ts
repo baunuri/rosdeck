@@ -77,10 +77,22 @@ describe('resolveStickMappings', () => {
     },
   });
 
-  it('single widget auto: left stick forward/back, right stick steering', () => {
-    const mappings = resolveStickMappings([makeWidget('j1')]);
+  it('single widget auto left-drive: left=fwd/back, right=steering', () => {
+    const mappings = resolveStickMappings([makeWidget('j1')], 'left-drive');
     expect(mappings).toHaveLength(1);
-    expect(mappings[0].nodeId).toBe('j1');
+    expect(mappings[0].xStick).toBe('right');
+    expect(mappings[0].yStick).toBe('left');
+  });
+
+  it('single widget auto left-steer: left=steering, right=fwd/back', () => {
+    const mappings = resolveStickMappings([makeWidget('j1')], 'left-steer');
+    expect(mappings).toHaveLength(1);
+    expect(mappings[0].xStick).toBe('left');
+    expect(mappings[0].yStick).toBe('right');
+  });
+
+  it('single widget auto defaults to left-drive', () => {
+    const mappings = resolveStickMappings([makeWidget('j1')]);
     expect(mappings[0].xStick).toBe('right');
     expect(mappings[0].yStick).toBe('left');
   });
