@@ -40,7 +40,9 @@ function buildTwistFromAxes(axes: Record<string, number>): TwistMessage {
   const twist: TwistMessage = { linear: { x: 0, y: 0, z: 0 }, angular: { x: 0, y: 0, z: 0 } };
   for (const [field, value] of Object.entries(axes) as [TwistField, number][]) {
     const [group, axis] = field.split('.') as ['linear' | 'angular', 'x' | 'y' | 'z'];
-    twist[group][axis] = value ?? 0;
+    if (twist[group]) {
+      twist[group][axis] = value ?? 0;
+    }
   }
   return twist;
 }
