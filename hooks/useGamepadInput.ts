@@ -109,8 +109,8 @@ export function useGamepadInput() {
       const topic = config.topic;
       trackedTopicsRef.current.add(topic);
 
-      const xField = `${config.xAxisGroup}.${config.xAxisComponent}` as TwistField;
-      const yField = `${config.yAxisGroup}.${config.yAxisComponent}` as TwistField;
+      const xField = `${config.xAxisGroup ?? 'angular'}.${config.xAxisComponent ?? 'z'}` as TwistField;
+      const yField = `${config.yAxisGroup ?? 'linear'}.${config.yAxisComponent ?? 'x'}` as TwistField;
 
       const axes: Partial<Record<TwistField, number>> = {};
 
