@@ -24,6 +24,7 @@ export interface SplitNode {
 export type LayoutNode = SplitNode | WidgetNode;
 
 export interface WidgetProps {
+  nodeId?: string;
   config: Record<string, any>;
   onConfigChange: (config: Record<string, any>) => void;
   width: number;

@@ -69,6 +69,7 @@ function RenderNode({ node, width, height, parentSplitId, parentDirection }: Ren
       <View style={{ width, height, position: 'relative' }}>
         <WidgetContentWrapper width={width} height={height}>
           <Widget
+            nodeId={node.id}
             config={node.config}
             onConfigChange={(newConfig) => {
               useLayoutStore.getState().updateWidgetConfig(node.id, newConfig);

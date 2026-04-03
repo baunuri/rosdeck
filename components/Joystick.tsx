@@ -13,6 +13,7 @@ import { theme } from "../constants/theme";
 import { type TwistField } from "../lib/ros";
 import { useCmdVelPublisher } from "../hooks/useCmdVelPublisher";
 import { useCmdVelStore } from "../stores/useCmdVelStore";
+import { useGamepadStore } from '../stores/useGamepadStore';
 import type { WidgetProps } from "../types/layout";
 import { registerTouchEntry, unregisterTouchEntry, updateTouchBounds } from "../lib/touch-dispatcher";
 
@@ -66,6 +67,13 @@ export function Joystick(props?: Partial<WidgetProps>) {
   const setAxes = useCmdVelStore((s) => s.setAxes);
   const { publishNow } = useCmdVelPublisher(cmdVelTopic, useTwistStamped, frameId);
 
+  const gamepadConnected = useGamepadStore((s) => s.connected);
+  const nodeId = props?.nodeId;
+  const resolvedStick = useGamepadStore((s) => nodeId ? s.resolvedMappings[nodeId] : undefined);
+  const stickLabel = gamepadConnected && resolvedStick && resolvedStick !== 'none'
+    ? resolvedStick === 'left' ? 'L' : 'R'
+    : null;
+
   useEffect(() => {
     return () => {
       setAxes(cmdVelTopic, { [xAxisField]: 0, [yAxisField]: 0 });
@@ -114,8 +122,12 @@ export function Joystick(props?: Partial<WidgetProps>) {
   updateVelocityRef.current = updateVelocity;
   stopJoystickRef.current = stopJoystick;
 
-  // Register once on mount; unregister on unmount
+  // Register/unregister touch based on gamepad connection
   useEffect(() => {
+    if (gamepadConnected) {
+      unregisterTouchEntry(instanceId);
+      return;
+    }
     registerTouchEntry(instanceId, {
       bounds: null,
       onTouchStart: (_touchId, _pageX, _pageY) => {
@@ -159,7 +171,37 @@ export function Joystick(props?: Partial<WidgetProps>) {
       },
     });
     return () => unregisterTouchEntry(instanceId);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [gamepadConnected]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // When gamepad is connected, animate knob from store values
+  useEffect(() => {
+    if (!gamepadConnected) return;
+
+    const unsub = useCmdVelStore.subscribe((state) => {
+      const axes = state.topics[cmdVelTopic] ?? {};
+      const xVal = (axes[xAxisField] ?? 0) as number;
+      const yVal = (axes[yAxisField] ?? 0) as number;
+      const r = radiusRef.current;
+
+      // Reverse the velocity→pixel mapping
+      const knobX = -(xVal / xAxisScale) * r;
+      const knobY = -(yVal / yAxisScale) * r;
+
+      translateX.value = knobX;
+      translateY.value = knobY;
+
+      displayVelocityRef.current = { xValue: xVal, yValue: yVal };
+      if (!displayRafScheduled.current) {
+        displayRafScheduled.current = true;
+        requestAnimationFrame(() => {
+          displayRafScheduled.current = false;
+          setDisplayVelocity({ ...displayVelocityRef.current });
+        });
+      }
+    });
+
+    return unsub;
+  }, [gamepadConnected, cmdVelTopic, xAxisField, yAxisField, xAxisScale, yAxisScale]);
 
   // ─── Layout ───────────────────────────────────────────────────────────────
   const availWidth = props?.width || 300;
@@ -230,6 +272,11 @@ export function Joystick(props?: Partial<WidgetProps>) {
             knobStyle,
           ]}
         />
+        {gamepadConnected && stickLabel && (
+          <View style={styles.stickBadge}>
+            <Text style={styles.stickBadgeText}>{stickLabel}</Text>
+          </View>
+        )}
       </View>
 
       <View style={styles.readout}>
@@ -309,5 +356,20 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: theme.colors.textMuted,
     textAlign: "center",
+  },
+  stickBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: theme.colors.accentPrimary + '33',
+    borderRadius: 4,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+  },
+  stickBadgeText: {
+    fontFamily: 'SpaceMono',
+    fontSize: 8,
+    color: theme.colors.accentPrimary,
+    fontWeight: '700',
   },
 });
