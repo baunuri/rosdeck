@@ -125,7 +125,8 @@ export function useGamepadInput() {
       const axes: Partial<Record<TwistField, number>> = {};
 
       if (xStick !== 'none') {
-        const rawX = xStick === 'left' ? event.leftX : event.rightX;
+        // Negate X to match touch joystick convention (calculateVelocity negates both axes)
+        const rawX = xStick === 'left' ? -event.leftX : -event.rightX;
         axes[xField] = applyDeadzone(rawX, deadzone) * (config.xAxisScale ?? 1);
       }
       if (yStick !== 'none') {
