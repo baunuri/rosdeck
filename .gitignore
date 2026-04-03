@@ -42,6 +42,10 @@ yarn-error.*
 /android
 patches/
 
+# native module build artifacts
+modules/*/android/build/
+modules/*/ios/build/
+
 # dev/AI artifacts
 .superpowers/
 .claude/
@@ -52,6 +56,8 @@ docs/
 app.json
 eas.json
 *.keystore
+.easignore
+.npmrc
 
 assets/images/icon-candidates
 
