@@ -53,8 +53,8 @@ export function resolveStickMappings(widgets: JoystickWidgetInfo[]): StickMappin
 
     // Auto mapping
     if (widgets.length === 1) {
-      // Split-stick: left-X for widget X axis, right-Y for widget Y axis
-      return { ...w, xStick: 'left', yStick: 'right' };
+      // Split-stick: left stick for forward/back (Y axis), right stick for steering (X axis)
+      return { ...w, xStick: 'right', yStick: 'left' };
     }
     if (i === 0) return { ...w, xStick: 'left', yStick: 'left' };
     if (i === 1) return { ...w, xStick: 'right', yStick: 'right' };
