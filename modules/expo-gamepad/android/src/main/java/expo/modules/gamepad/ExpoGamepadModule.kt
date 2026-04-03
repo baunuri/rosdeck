@@ -1,13 +1,10 @@
 package expo.modules.gamepad
 
 import android.hardware.input.InputManager
-import android.util.Log
 import android.view.InputDevice
 import android.view.MotionEvent
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
-
-private const val TAG = "ExpoGamepad"
 
 class ExpoGamepadModule : Module() {
   private var lastEmitTime = 0L
@@ -22,7 +19,6 @@ class ExpoGamepadModule : Module() {
 
     OnCreate {
       instance = this@ExpoGamepadModule
-      Log.d(TAG, "OnCreate — scanning for gamepads")
 
       // Register for dynamic device connect/disconnect
       val activity = appContext.currentActivity
@@ -89,12 +85,8 @@ class ExpoGamepadModule : Module() {
 
   private fun processMotionEvent(event: MotionEvent): Boolean {
     val sources = event.source
-    Log.d(TAG, "processMotionEvent source=0x${sources.toString(16)} action=${event.action}")
     if (sources and InputDevice.SOURCE_JOYSTICK != InputDevice.SOURCE_JOYSTICK &&
-        sources and InputDevice.SOURCE_GAMEPAD != InputDevice.SOURCE_GAMEPAD) {
-      Log.d(TAG, "Rejected — not joystick/gamepad source")
-      return false
-    }
+        sources and InputDevice.SOURCE_GAMEPAD != InputDevice.SOURCE_GAMEPAD) return false
 
     // Auto-detect connection on first axis event if not already connected
     if (!connected) {
@@ -124,7 +116,6 @@ class ExpoGamepadModule : Module() {
 
     @JvmStatic
     fun handleMotionEvent(event: MotionEvent): Boolean {
-      Log.d(TAG, "handleMotionEvent called, instance=${if (instance != null) "set" else "null"}")
       return instance?.processMotionEvent(event) ?: false
     }
   }

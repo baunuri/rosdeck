@@ -16,7 +16,6 @@ import type { GamepadStickEvent } from '../modules/expo-gamepad/src';
 const WATCHDOG_TIMEOUT = 500;
 
 export function useGamepadInput() {
-  console.log('[Gamepad] useGamepadInput hook mounted');
   const mappingsRef = useRef<StickMapping[]>([]);
   const watchdogRef = useRef<ReturnType<typeof setTimeout>>();
   const trackedTopicsRef = useRef<Set<string>>(new Set());
@@ -63,9 +62,7 @@ export function useGamepadInput() {
 
   // Connection listener
   useEffect(() => {
-    console.log('[Gamepad] Registering connection listener');
     const sub = addConnectionListener((event) => {
-      console.log('[Gamepad] Connection event:', JSON.stringify(event));
       useGamepadStore.getState().setConnected(event.connected, event.name);
       if (!event.connected) {
         zeroAllAxes();
@@ -76,14 +73,7 @@ export function useGamepadInput() {
 
   // Axis listener
   useEffect(() => {
-    console.log('[Gamepad] Registering axis listener');
-    let axisCount = 0;
     const sub = addAxisListener((event) => {
-      axisCount++;
-      if (axisCount <= 3 || axisCount % 100 === 0) {
-        console.log(`[Gamepad] Axis event #${axisCount}:`, JSON.stringify(event));
-        console.log(`[Gamepad] Mappings count: ${mappingsRef.current.length}, connected: ${useGamepadStore.getState().connected}`);
-      }
       resetWatchdog();
       processAxes(event);
     });
