@@ -1,6 +1,8 @@
 package expo.modules.gamepad
 
 import android.hardware.input.InputManager
+import android.os.Handler
+import android.os.Looper
 import android.view.InputDevice
 import android.view.MotionEvent
 import expo.modules.kotlin.modules.Module
@@ -11,6 +13,8 @@ class ExpoGamepadModule : Module() {
   private val throttleMs = 33L // ~30Hz
   private var connected = false
   private var inputListener: InputManager.InputDeviceListener? = null
+  private var pendingAxes: Map<String, Double>? = null
+  private val handler = Handler(Looper.getMainLooper())
 
   override fun definition() = ModuleDefinition {
     Name("ExpoGamepad")
@@ -98,16 +102,33 @@ class ExpoGamepadModule : Module() {
       ))
     }
 
-    val now = System.currentTimeMillis()
-    if (now - lastEmitTime < throttleMs) return true
-    lastEmitTime = now
-
-    sendEvent("onGamepadAxis", mapOf(
+    val axes = mapOf(
       "leftX" to event.getAxisValue(MotionEvent.AXIS_X).toDouble(),
       "leftY" to event.getAxisValue(MotionEvent.AXIS_Y).toDouble(),
       "rightX" to event.getAxisValue(MotionEvent.AXIS_Z).toDouble(),
       "rightY" to event.getAxisValue(MotionEvent.AXIS_RZ).toDouble(),
-    ))
+    )
+
+    val now = System.currentTimeMillis()
+    val elapsed = now - lastEmitTime
+    if (elapsed >= throttleMs) {
+      // Throttle window open — emit immediately
+      lastEmitTime = now
+      pendingAxes = null
+      sendEvent("onGamepadAxis", axes)
+    } else {
+      // Throttle window closed — buffer latest and schedule trailing emit
+      if (pendingAxes == null) {
+        handler.postDelayed({
+          pendingAxes?.let {
+            lastEmitTime = System.currentTimeMillis()
+            sendEvent("onGamepadAxis", it)
+            pendingAxes = null
+          }
+        }, throttleMs - elapsed)
+      }
+      pendingAxes = axes
+    }
     return true
   }
 
