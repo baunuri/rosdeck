@@ -26,7 +26,7 @@
 
 ## Why ROSDeck?
 
-[ROS-Mobile](https://github.com/nicosander/ros-mobile-android) was the go-to for ROS1 (500+ stars, 13K+ downloads, 4.5+ rating) but is stuck on ROS1, which hit EOL in May 2025. ROS2 adoption is growing fast with no polished mobile equivalent. ROSDeck fills that gap — a native, cross-platform app purpose-built for ROS2.
+[ROS-Mobile](https://github.com/ROS-Mobile/ROS-Mobile-Android) was the go-to for ROS1 (500+ stars, 13K+ downloads, 4.5+ rating) but is stuck on ROS1, which hit EOL in May 2025. ROS2 adoption is growing fast with no polished mobile equivalent. ROSDeck fills that gap — a native, cross-platform app purpose-built for ROS2.
 
 ## Features
 
