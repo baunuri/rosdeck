@@ -20,6 +20,7 @@ import { useOnboardingStore } from "../../stores/useOnboardingStore";
 import { useOrientation } from "../../hooks/useOrientation";
 import { useRosStore } from "../../stores/useRosStore";
 import { useSettingsStore } from "../../stores/useSettingsStore";
+import { useGamepadInput } from "../../hooks/useGamepadInput";
 
 function ConnectionDot() {
   const status = useRosStore((s) => s.connection.status);
@@ -128,6 +129,7 @@ export default function ControlScreen() {
   const router = useRouter();
   const { isLandscape } = useOrientation();
   const isDemo = url?.startsWith("demo://");
+  useGamepadInput();
 
   const [suggestion, setSuggestion] = useState<TopicSuggestion | null>(null);
   const [showSuggestion, setShowSuggestion] = useState(false);
