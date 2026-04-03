@@ -79,15 +79,15 @@ class ExpoGamepadModule : Module() {
   }
 
   private fun hasConnectedGamepad(): Boolean {
-    return InputDevice.getDeviceIds().any { id ->
-      InputDevice.getDevice(id)?.let { isGamepad(it) } ?: false
-    }
+    return findFirstGamepad() != null
   }
 
   private fun findFirstGamepad(): InputDevice? {
-    return InputDevice.getDeviceIds()
-      .mapNotNull { InputDevice.getDevice(it) }
-      .firstOrNull { isGamepad(it) }
+    for (id in InputDevice.getDeviceIds()) {
+      val device = InputDevice.getDevice(id) ?: continue
+      if (isGamepad(device)) return device
+    }
+    return null
   }
 
   private fun processMotionEvent(event: MotionEvent): Boolean {
