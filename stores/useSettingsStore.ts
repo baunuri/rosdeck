@@ -11,6 +11,7 @@ interface SettingsState {
   fieldPickerDepth: number;
   fieldPickerArrayLimit: number;
   tabRailSide: 'left' | 'right';
+  gamepadDeadzone: number;
   loaded: boolean;
   load: () => Promise<void>;
   setHapticsEnabled: (value: boolean) => void;
@@ -20,6 +21,7 @@ interface SettingsState {
   setFieldPickerDepth: (value: number) => void;
   setFieldPickerArrayLimit: (value: number) => void;
   setTabRailSide: (value: 'left' | 'right') => void;
+  setGamepadDeadzone: (value: number) => void;
 }
 
 const defaults = {
@@ -30,6 +32,7 @@ const defaults = {
   fieldPickerDepth: 8,
   fieldPickerArrayLimit: 32,
   tabRailSide: 'left' as const,
+  gamepadDeadzone: 0.1,
 };
 
 function persistAll(get: () => SettingsState) {
@@ -69,4 +72,5 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setFieldPickerDepth: (value) => { set({ fieldPickerDepth: value }); persistAll(get); },
   setFieldPickerArrayLimit: (value) => { set({ fieldPickerArrayLimit: value }); persistAll(get); },
   setTabRailSide: (value) => { set({ tabRailSide: value }); persistAll(get); },
+  setGamepadDeadzone: (value) => { set({ gamepadDeadzone: value }); persistAll(get); },
 }));

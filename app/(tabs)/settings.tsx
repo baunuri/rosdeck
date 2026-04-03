@@ -24,6 +24,7 @@ import { theme } from '../../constants/theme';
 const PUBLISH_RATE_OPTIONS = [5, 10, 20, 30];
 const DEPTH_OPTIONS = [4, 6, 8, 12];
 const ARRAY_LIMIT_OPTIONS = [8, 16, 32, 64];
+const DEADZONE_OPTIONS = [0.05, 0.1, 0.15, 0.2, 0.3];
 
 export default function SettingsScreen() {
   const hapticsEnabled = useSettingsStore((s) => s.hapticsEnabled);
@@ -40,6 +41,8 @@ export default function SettingsScreen() {
   const setFieldPickerArrayLimit = useSettingsStore((s) => s.setFieldPickerArrayLimit);
   const tabRailSide = useSettingsStore((s) => s.tabRailSide);
   const setTabRailSide = useSettingsStore((s) => s.setTabRailSide);
+  const gamepadDeadzone = useSettingsStore((s) => s.gamepadDeadzone);
+  const setGamepadDeadzone = useSettingsStore((s) => s.setGamepadDeadzone);
 
   const robotUrl = useLayoutStore((s) => s.robotUrl);
   const [showGuide, setShowGuide] = React.useState(false);
@@ -207,6 +210,33 @@ export default function SettingsScreen() {
                 ]}
               >
                 {rate} Hz
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+
+      <Text style={styles.sectionTitle}>GAMEPAD</Text>
+      <View style={styles.card}>
+        <Text style={styles.rowTitle}>Stick Deadzone</Text>
+        <Text style={styles.rowSubtitle}>Ignore small stick movements (noise filtering)</Text>
+        <View style={styles.segmentedRow}>
+          {DEADZONE_OPTIONS.map((dz) => (
+            <TouchableOpacity
+              key={dz}
+              style={[
+                styles.segmentButton,
+                gamepadDeadzone === dz && styles.segmentButtonActive,
+              ]}
+              onPress={() => setGamepadDeadzone(dz)}
+            >
+              <Text
+                style={[
+                  styles.segmentText,
+                  gamepadDeadzone === dz && styles.segmentTextActive,
+                ]}
+              >
+                {dz}
               </Text>
             </TouchableOpacity>
           ))}
