@@ -18,12 +18,20 @@ export const joystickWidget: WidgetDefinition = {
     yAxisGroup: 'linear',
     yAxisComponent: 'x',
     yAxisScale: 0.5,
+    gamepadStick: 'auto',
   },
   configSchema: [
     { key: 'topic', label: 'cmd_vel Topic', type: 'text' },
     { key: 'useTwistStamped', label: 'Use TwistStamped (Jazzy+)', type: 'boolean' },
     { key: 'frameId', label: 'Frame ID', type: 'text' },
     { key: 'axisMapping', label: 'Axis Mapping', type: 'axis-mapping' },
+    { key: 'gamepadStick', label: 'Gamepad Stick', type: 'select',
+      options: [
+        { label: 'Auto', value: 'auto' },
+        { label: 'Left Stick', value: 'left' },
+        { label: 'Right Stick', value: 'right' },
+        { label: 'None', value: 'none' },
+      ] },
   ],
   component: Joystick as any,
 };
