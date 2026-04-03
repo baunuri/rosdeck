@@ -36,7 +36,7 @@
 - **2D map** — render `OccupancyGrid`, overlay `LaserScan` point clouds, show robot pose from TF
 - **Nav2 integration** — tap the map to publish goal poses
 - **Rosbridge & Foxglove** — connect via `rosbridge_server` (port 9090) or `foxglove_bridge` (port 8765), no DDS configuration needed
-- **Customizable layouts** — tmux-style split panes, drag-and-drop widget placement, save/load per robot
+- **Customizable layouts** — tmux-style split panes, swap and resize widgets, save/load per robot
 - **Auto-layout** — detects available topics on connect and suggests a matching layout
 - **Demo mode** — try the full app without a robot
 
