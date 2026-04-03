@@ -118,20 +118,19 @@ export function Joystick(props?: Partial<WidgetProps>) {
   const yAxisScaleRef = useRef(yAxisScale);
   const updateVelocityRef = useRef(updateVelocity);
   const stopJoystickRef = useRef(stopJoystick);
+  const gamepadConnectedRef = useRef(gamepadConnected);
   xAxisScaleRef.current = xAxisScale;
   yAxisScaleRef.current = yAxisScale;
   updateVelocityRef.current = updateVelocity;
   stopJoystickRef.current = stopJoystick;
+  gamepadConnectedRef.current = gamepadConnected;
 
-  // Register/unregister touch based on gamepad connection
+  // Register once on mount; handlers check gamepadConnectedRef to no-op when gamepad active
   useEffect(() => {
-    if (gamepadConnected) {
-      unregisterTouchEntry(instanceId);
-      return;
-    }
     registerTouchEntry(instanceId, {
       bounds: null,
       onTouchStart: (_touchId, _pageX, _pageY) => {
+        if (gamepadConnectedRef.current) return;
         wasAtEdgeRef.current = false;
         prevSignXRef.current = 0;
         prevSignYRef.current = 0;
@@ -140,6 +139,7 @@ export function Joystick(props?: Partial<WidgetProps>) {
         setShowHint(false);
       },
       onTouchMove: (_touchId, dx, dy) => {
+        if (gamepadConnectedRef.current) return;
         const r = radiusRef.current;
         const dist = Math.sqrt(dx * dx + dy * dy);
 
@@ -165,6 +165,7 @@ export function Joystick(props?: Partial<WidgetProps>) {
         updateVelocityRef.current(nx * xAxisScaleRef.current, ny * yAxisScaleRef.current);
       },
       onTouchEnd: (_touchId) => {
+        if (gamepadConnectedRef.current) return;
         activeProgress.value = withTiming(0, { duration: 200 });
         translateX.value = withSpring(0, SPRING_CONFIG);
         translateY.value = withSpring(0, SPRING_CONFIG);
@@ -172,7 +173,7 @@ export function Joystick(props?: Partial<WidgetProps>) {
       },
     });
     return () => unregisterTouchEntry(instanceId);
-  }, [gamepadConnected]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // When gamepad is connected, animate knob from store values
   useEffect(() => {
