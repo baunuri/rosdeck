@@ -25,33 +25,40 @@ export function useGamepadInput() {
   // Uses manual comparison (same pattern as useCmdVelPublisher.ts:19-37)
   // since useLayoutStore does not use subscribeWithSelector middleware.
   const lastTreeRef = useRef<any>(null);
-  useEffect(() => {
-    const update = () => {
-      const layout = useLayoutStore.getState().getActiveLayout();
-      const tree = layout?.tree ?? null;
-      if (tree === lastTreeRef.current) return;
-      lastTreeRef.current = tree;
-      if (!tree) {
-        mappingsRef.current = [];
-        useGamepadStore.getState().setResolvedMappings({});
-        return;
-      }
-      const widgets = collectJoystickWidgets(tree);
-      const autoLayout = useSettingsStore.getState().gamepadAutoLayout;
-      const resolved = resolveStickMappings(widgets, autoLayout);
-      mappingsRef.current = resolved;
+  const lastAutoLayoutRef = useRef<string>('');
 
-      // Write resolved mappings to store so Joystick widgets can read their badge
-      const mappingRecord: Record<string, 'left' | 'right' | 'split' | 'none'> = {};
-      for (const m of resolved) {
-        mappingRecord[m.nodeId] = m.xStick === 'none' && m.yStick === 'none' ? 'none'
-          : m.xStick !== m.yStick ? 'split'
-          : m.xStick;
-      }
-      useGamepadStore.getState().setResolvedMappings(mappingRecord);
-    };
-    update();
-    return useLayoutStore.subscribe(update);
+  const recomputeMappings = () => {
+    const layout = useLayoutStore.getState().getActiveLayout();
+    const tree = layout?.tree ?? null;
+    const autoLayout = useSettingsStore.getState().gamepadAutoLayout;
+
+    if (tree === lastTreeRef.current && autoLayout === lastAutoLayoutRef.current) return;
+    lastTreeRef.current = tree;
+    lastAutoLayoutRef.current = autoLayout;
+
+    if (!tree) {
+      mappingsRef.current = [];
+      useGamepadStore.getState().setResolvedMappings({});
+      return;
+    }
+    const widgets = collectJoystickWidgets(tree);
+    const resolved = resolveStickMappings(widgets, autoLayout);
+    mappingsRef.current = resolved;
+
+    const mappingRecord: Record<string, 'left' | 'right' | 'split' | 'none'> = {};
+    for (const m of resolved) {
+      mappingRecord[m.nodeId] = m.xStick === 'none' && m.yStick === 'none' ? 'none'
+        : m.xStick !== m.yStick ? 'split'
+        : m.xStick;
+    }
+    useGamepadStore.getState().setResolvedMappings(mappingRecord);
+  };
+
+  useEffect(() => {
+    recomputeMappings();
+    const unsub1 = useLayoutStore.subscribe(recomputeMappings);
+    const unsub2 = useSettingsStore.subscribe(recomputeMappings);
+    return () => { unsub1(); unsub2(); };
   }, []);
 
   // Connection listener
