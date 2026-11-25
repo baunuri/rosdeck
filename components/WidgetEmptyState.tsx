@@ -24,6 +24,11 @@ const WIDGET_HELP: Record<
     message: "No occupancy grid on",
     hint: "Is your SLAM node running?",
   },
+  pointcloud3d: {
+    icon: "cube-outline",
+    message: "No point cloud on",
+    hint: "Check the topic and that your lidar/depth camera is publishing.",
+  },
   laserscan: {
     icon: "radio-outline",
     message: "No scan data on",

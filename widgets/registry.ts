@@ -11,6 +11,7 @@ import { diagnosticsWidget } from './diagnostics';
 import { rosoutWidget } from './rosout';
 import { batteryWidget } from './battery';
 import { chartWidget } from './chart';
+import { pointCloud3DWidget } from './pointcloud3d';
 
 export const WIDGET_REGISTRY: Record<string, WidgetDefinition> = {
   joystick: joystickWidget,
@@ -24,6 +25,7 @@ export const WIDGET_REGISTRY: Record<string, WidgetDefinition> = {
   rosout: rosoutWidget,
   battery: batteryWidget,
   chart: chartWidget,
+  pointcloud3d: pointCloud3DWidget,
 };
 
 export function getWidget(type: string): WidgetDefinition | undefined {
