@@ -57,7 +57,13 @@ export function TopicPicker({ value, filterMessageTypes, onSelect, multiple }: P
   if (!expanded) {
     return (
       <TouchableOpacity style={styles.collapsed} onPress={() => setExpanded(true)}>
-        <Text style={styles.topicValue}>{shown || placeholder}</Text>
+        <Text style={[styles.topicValue, styles.flex]} numberOfLines={2}>{shown || placeholder}</Text>
+        {value ? (
+          // Clear: turns the layer off (unsubscribes).
+          <TouchableOpacity onPress={() => onSelect('')} hitSlop={10} accessibilityLabel="Clear topic" style={styles.clear}>
+            <Ionicons name="close-circle" size={18} color={theme.colors.textMuted} />
+          </TouchableOpacity>
+        ) : null}
         <Ionicons name="chevron-down" size={16} color={theme.colors.textMuted} />
       </TouchableOpacity>
     );
@@ -184,6 +190,8 @@ const styles = StyleSheet.create({
   topicItemActive: {
     backgroundColor: theme.colors.accentPrimaryMuted,
   },
+  flex: { flex: 1 },
+  clear: { paddingHorizontal: 8 },
   topicRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

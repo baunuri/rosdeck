@@ -14,13 +14,14 @@ import { type TwistField } from "../lib/ros";
 import { useCmdVelPublisher } from "../hooks/useCmdVelPublisher";
 import { useCmdVelStore } from "../stores/useCmdVelStore";
 import { useGamepadStore } from '../stores/useGamepadStore';
+import { useSettingsStore } from "../stores/useSettingsStore";
 import type { WidgetProps } from "../types/layout";
 import { registerTouchEntry, unregisterTouchEntry, updateTouchBounds } from "../lib/touch-dispatcher";
 
 const lightTick = () => {
   if (Platform.OS === "ios") {
     Haptics.selectionAsync();
-  } else {
+  } else if (useSettingsStore.getState().hapticsEnabled) {
     Vibration.vibrate(10);
   }
 };
