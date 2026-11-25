@@ -62,12 +62,13 @@ export function View3DWidget(props: Partial<WidgetProps>) {
   const goalTopic: string = config.goalTopic || '/goal_pose';
   const accumulate = Boolean(config.accumulate);
   const showGrid = config.showGrid ?? true;
+  const startTopDown = Boolean(config.topDown);
   const width = Math.max(1, props?.width || 300);
   const height = Math.max(1, props?.height || 300);
 
   const [stats, setStats] = useState({ frame: '', fallback: false, robot: false, cloudPoints: 0, cloudBytes: 0 });
   const [follow, setFollowState] = useState(true);
-  const [topDown, setTopDown] = useState(false);
+  const [topDown, setTopDown] = useState(startTopDown);
   const [placingGoal, setPlacingGoal] = useState(false);
 
   // Scene state lives in refs: data and gestures request a frame; React never re-renders per frame.
@@ -81,7 +82,7 @@ export function View3DWidget(props: Partial<WidgetProps>) {
   const fixedRef = useRef(fixedFrame);
   const followRef = useRef(true);
   const cameraRef = useRef<Camera>({
-    yaw: 0, pitch: TILTED_PITCH, viewMeters: Math.max(2, Number(config.viewMeters || 20)), target: { x: 0, y: 0, z: 0 },
+    yaw: 0, pitch: startTopDown ? 0 : TILTED_PITCH, viewMeters: Math.max(2, Number(config.viewMeters || 20)), target: { x: 0, y: 0, z: 0 },
   });
   const gestureStart = useRef<Camera>(cameraRef.current);
   const frameRequested = useRef(false);

@@ -25,6 +25,7 @@ export const view3dWidget: WidgetDefinition = {
     enableGoal: true,
     goalTopic: '/goal_pose',
     showGrid: true,
+    topDown: false,
     viewMeters: 20,
   },
   configSchema: [
@@ -41,6 +42,7 @@ export const view3dWidget: WidgetDefinition = {
     { key: 'enableGoal', label: 'Nav Goal Tool (hold + drag)', type: 'boolean' },
     { key: 'goalTopic', label: 'Goal Topic', type: 'text', placeholder: '/goal_pose', visibleWhen: { key: 'enableGoal', value: true } },
     { key: 'showGrid', label: 'Show Grid', type: 'boolean' },
+    { key: 'topDown', label: 'Start in Top-Down View', type: 'boolean' },
     { key: 'viewMeters', label: 'Default View Size (m)', type: 'number', placeholder: '20' },
   ],
   component: View3DWidget as any,

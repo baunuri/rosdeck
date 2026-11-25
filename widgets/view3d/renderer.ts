@@ -71,7 +71,7 @@ uniform float uOpacity;
 varying vec2 vUV;
 void main() { vec4 t = texture2D(uTex, vUV); gl_FragColor = vec4(t.rgb, t.a * uOpacity); }`;
 
-// Pixel rows from occupancyGridToPixels run top (max y) to bottom, hence v = 1 at the origin row.
+// Pixel rows from gridToRgbaFast run top (max y) to bottom, hence v = 1 at the origin row.
 const QUAD_UV = new Float32Array([0, 1, 1, 1, 0, 0, 1, 0]);
 
 interface PointStyle { color: Rgba; size: number; heightColored?: boolean; zMin?: number; zMax?: number }
