@@ -79,6 +79,8 @@ export function View3DWidget(props: Partial<WidgetProps>) {
   const accumulate = Boolean(config.accumulate);
   const showGrid = config.showGrid ?? true;
   const startTopDown = Boolean(config.topDown);
+  // RViz-like: Orbit (perspective) in 3D, TopDownOrtho when top-down.
+  const usePerspective = config.perspective ?? true;
   const width = Math.max(1, props?.width || 300);
   const height = Math.max(1, props?.height || 300);
 
@@ -109,7 +111,7 @@ export function View3DWidget(props: Partial<WidgetProps>) {
   const fixedRef = useRef(fixedFrame);
   const followRef = useRef(true);
   const cameraRef = useRef<Camera>({
-    yaw: 0, pitch: startTopDown ? 0 : TILTED_PITCH, viewMeters: Math.max(2, Number(config.viewMeters || 20)), target: { x: 0, y: 0, z: 0 },
+    yaw: 0, pitch: startTopDown ? 0 : TILTED_PITCH, perspective: !startTopDown && usePerspective, viewMeters: Math.max(2, Number(config.viewMeters || 20)), target: { x: 0, y: 0, z: 0 },
   });
   const gestureStart = useRef<Camera>(cameraRef.current);
   const frameRequested = useRef(false);
@@ -228,7 +230,7 @@ export function View3DWidget(props: Partial<WidgetProps>) {
     const cam = cameraRef.current;
     const r = (v: number) => Math.round(v * 1000);
     const signature = [
-      dataVersion.current, fixed, w, h, r(cam.yaw), r(cam.pitch), r(cam.viewMeters),
+      dataVersion.current, fixed, w, h, r(cam.yaw), r(cam.pitch), r(cam.viewMeters), cam.perspective ? 'p' : 'o',
       r(cam.target.x), r(cam.target.y), r(cam.target.z),
       pose ? [r(pose.translation.x), r(pose.translation.y), r(pose.rotation.z), r(pose.rotation.w)].join() : '-',
     ].join('|');
@@ -397,6 +399,7 @@ export function View3DWidget(props: Partial<WidgetProps>) {
       setTopDown(false);
       setCamera({
         ...cameraRef.current,
+        perspective: usePerspective,
         yaw: start.yaw + e.translationX * 0.008,
         pitch: Math.max(0, Math.min(1.45, start.pitch - e.translationY * 0.006)),
       });
@@ -468,13 +471,18 @@ export function View3DWidget(props: Partial<WidgetProps>) {
         setPlacingGoal(false);
       });
     return Gesture.Race(goal, view);
-  }, [enableGoal, enablePoseEstimate, goalTopic, poseEstimateTopic, pending, requestDraw, setCamera, setFollow, transport]);
+  }, [enableGoal, enablePoseEstimate, goalTopic, poseEstimateTopic, pending, requestDraw, setCamera, setFollow, transport, usePerspective]);
 
   const toggleTopDown = useCallback(() => {
     const next = !topDown;
     setTopDown(next);
-    setCamera({ ...cameraRef.current, yaw: next ? 0 : cameraRef.current.yaw, pitch: next ? 0 : TILTED_PITCH });
-  }, [setCamera, topDown]);
+    setCamera({
+      ...cameraRef.current,
+      yaw: next ? 0 : cameraRef.current.yaw,
+      pitch: next ? 0 : TILTED_PITCH,
+      perspective: !next && usePerspective,
+    });
+  }, [setCamera, topDown, usePerspective]);
 
   if (connectionStatus !== 'connected') {
     return (

@@ -33,6 +33,7 @@ export const view3dWidget: WidgetDefinition = {
     poseEstimateTopic: '/initialpose',
     showGrid: true,
     topDown: false,
+    perspective: true,
     viewMeters: 20,
   },
   configSchema: [
@@ -56,6 +57,7 @@ export const view3dWidget: WidgetDefinition = {
     { key: 'poseEstimateTopic', label: 'Pose Estimate Topic', type: 'text', placeholder: '/initialpose', visibleWhen: { key: 'enablePoseEstimate', value: true } },
     { key: 'showGrid', label: 'Show Grid', type: 'boolean' },
     { key: 'topDown', label: 'Start in Top-Down View', type: 'boolean' },
+    { key: 'perspective', label: 'Perspective 3D View', type: 'boolean' },
     { key: 'viewMeters', label: 'Default View Size (m)', type: 'number', placeholder: '20' },
   ],
   component: View3DWidget as any,
