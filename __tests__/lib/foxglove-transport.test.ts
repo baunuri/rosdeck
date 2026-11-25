@@ -111,3 +111,36 @@ describe('FoxgloveTransport TF delivery', () => {
     jest.restoreAllMocks();
   });
 });
+
+describe('SplitFoxgloveTransport bulk reset', () => {
+  const { SplitFoxgloveTransport } = require('../../lib/foxglove-transport');
+  const fake = (lag: number) => {
+    const subs: string[] = [];
+    return {
+      subs, connected: true, disconnected: false,
+      connect: jest.fn(async () => {}), disconnect() { this.disconnected = true; },
+      getStatus: () => 'connected', onStatus: () => () => {},
+      subscribe: (topic: string) => { subs.push(topic); return { unsubscribe() {} }; },
+      minOffset: 0, lagAbove: () => lag,
+    };
+  };
+
+  it('replaces a backed-up bulk connection and re-subscribes its topics on the new one', async () => {
+    const [main, bulk, fresh] = [fake(0), fake(5000), fake(0)]; // bulk is 5 s behind
+    const queue = [main, bulk, fresh];
+    const t = new SplitFoxgloveTransport(() => queue.shift());
+    try {
+      await t.connect('ws://x');
+      t.subscribe('/cloud', 'sensor_msgs/msg/PointCloud2', () => {});
+      t.subscribe('/tf', 'tf2_msgs/msg/TFMessage', () => {});
+      t.checkBulkLag(Date.now() + 60_000);
+      await new Promise((r) => setImmediate(r));
+      expect(bulk.disconnected).toBe(true);
+      expect(fresh.subs).toEqual(['/cloud']);
+      expect(main.subs).toEqual(['/tf']);
+      expect(main.disconnected).toBe(false);
+    } finally {
+      t.disconnect();
+    }
+  });
+});

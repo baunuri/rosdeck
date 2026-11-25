@@ -7,6 +7,8 @@
 
 export interface LinkSample {
   minOffsetMs: number;
+  /** Times the heavy-topic connection was replaced to drop the robot-side backlog. */
+  resets?: number;
   topics: Array<{ topic: string; offsetMs: number; bytes: number; seenAt: number }>;
 }
 

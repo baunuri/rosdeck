@@ -9,6 +9,7 @@ import { theme } from '../constants/theme';
 export function LinkHealthBanner() {
   const transport = useRosStore((s) => s.transport);
   const [report, setReport] = useState<LinkReport | null>(null);
+  const [resets, setResets] = useState(0);
 
   useEffect(() => {
     if (!transport?.takeLinkSample) return;
@@ -16,7 +17,9 @@ export function LinkHealthBanner() {
     let last = Date.now();
     const timer = setInterval(() => {
       const now = Date.now();
-      setReport(linkReport(transport.takeLinkSample!(), now, now - last));
+      const sample = transport.takeLinkSample!();
+      setReport(linkReport(sample, now, now - last));
+      setResets(sample.resets ?? 0);
       last = now;
     }, 1000);
     return () => { clearInterval(timer); setReport(null); };
@@ -33,7 +36,7 @@ export function LinkHealthBanner() {
         </Text>
       </View>
       <Text style={styles.detail} numberOfLines={2}>
-        {heaviest}. Remove a layer or downsample on the robot.
+        {heaviest}.{resets > 0 ? ` Backlog dropped ${resets}×.` : ''} Remove a layer or downsample on the robot.
       </Text>
     </View>
   );

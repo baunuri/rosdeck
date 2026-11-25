@@ -43,6 +43,15 @@ export class FoxgloveTransport implements Transport {
     return this.status;
   }
 
+  get minOffset() { return this.minOffsetMs; }
+
+  /** Worst queueing delay among topics heard in the last few seconds, above `baseline` (ms). */
+  lagAbove(baseline: number, now = Date.now()) {
+    let worst = 0;
+    for (const a of this.arrivals.values()) if (now - a.seenAt < 5000) worst = Math.max(worst, a.offsetMs - baseline);
+    return worst;
+  }
+
   /** Arrival stats since the previous call (byte counters reset). One caller: the lag banner. */
   takeLinkSample(): LinkSample {
     const topics = [...this.arrivals].map(([topic, a]) => ({ topic, offsetMs: a.offsetMs, bytes: a.bytes, seenAt: a.seenAt }));
@@ -451,26 +460,81 @@ const BULK_TYPES = new Set([
   'foxglove_msgs/msg/CompressedVideo', 'nav_msgs/msg/OccupancyGrid', 'visualization_msgs/msg/MarkerArray',
 ]);
 
+/**
+ * When the bulk connection is this far behind, replace it: the bridge frees a closed client's
+ * queue. Safety net for bridges whose per-client queue is unbounded in practice (foxglove_bridge
+ * < 3.4, or the default message_backlog_size of 1024 large messages ≈ GBs on the robot).
+ */
+const BULK_RESET_LAG_MS = 3000;
+/** Give a fresh connection time to get going before judging it again. */
+const BULK_RESET_COOLDOWN_MS = 10_000;
+
 export class SplitFoxgloveTransport implements Transport {
-  private main = new FoxgloveTransport();
-  private bulk = new FoxgloveTransport();
+  private main: FoxgloveTransport;
+  private bulk: FoxgloveTransport;
+  private url = '';
+  private bulkSubs = new Set<{ topic: string; type: string; cb: (msg: any) => void; throttle?: number; handle: Subscription }>();
+  private watchdog: ReturnType<typeof setInterval> | null = null;
+  private lastReset = 0;
+  private resets = 0;
+
+  constructor(private readonly makeTransport = () => new FoxgloveTransport()) {
+    this.main = makeTransport();
+    this.bulk = makeTransport();
+  }
 
   async connect(url: string): Promise<void> {
+    this.url = url;
     const [main, bulk] = await Promise.allSettled([this.main.connect(url), this.bulk.connect(url)]);
     if (main.status === 'rejected') { this.bulk.disconnect(); throw main.reason; }
     // ponytail: no second connection (e.g. a client limit) → everything shares the first.
-    if (bulk.status === 'rejected') this.bulk = this.main;
-    // Losing either connection loses its topics: treat it as losing the robot, so reconnect covers both.
-    else this.bulk.onStatus((s) => { if (s === 'disconnected' || s === 'error') this.main.disconnect(); });
+    if (bulk.status === 'rejected') { this.bulk = this.main; return; }
+    this.watchBulk(this.bulk);
+    this.lastReset = Date.now();
+    this.watchdog = setInterval(() => this.checkBulkLag(), 1000);
+  }
+
+  /** Losing the bulk connection loses its topics: treat it as losing the robot (unless we replaced it). */
+  private watchBulk(t: FoxgloveTransport) {
+    t.onStatus((s) => { if (t === this.bulk && (s === 'disconnected' || s === 'error')) this.main.disconnect(); });
+  }
+
+  checkBulkLag(now = Date.now()) {
+    if (this.main.getStatus() !== 'connected') { this.stopWatchdog(); return; }
+    if (now - this.lastReset < BULK_RESET_COOLDOWN_MS) return;
+    // Main carries /tf, so its baseline stays honest while bulk is backed up.
+    const baseline = Math.min(this.main.minOffset, this.bulk.minOffset);
+    if (this.bulk.lagAbove(baseline, now) > BULK_RESET_LAG_MS) this.resetBulk(now);
+  }
+
+  private async resetBulk(now: number) {
+    this.lastReset = now;
+    const fresh = this.makeTransport();
+    try { await fresh.connect(this.url); } catch { return; } // keep the old one; retry after the cooldown
+    for (const s of this.bulkSubs) s.handle = fresh.subscribe(s.topic, s.type, s.cb, s.throttle);
+    const old = this.bulk;
+    this.bulk = fresh;
+    this.watchBulk(fresh);
+    this.resets++;
+    old.disconnect();
+  }
+
+  private stopWatchdog() {
+    if (this.watchdog) clearInterval(this.watchdog);
+    this.watchdog = null;
   }
 
   disconnect(): void {
+    this.stopWatchdog();
     this.main.disconnect();
     if (this.bulk !== this.main) this.bulk.disconnect();
   }
 
   subscribe(topic: string, messageType: string, callback: (msg: any) => void, throttleRate?: number): Subscription {
-    return (BULK_TYPES.has(messageType) ? this.bulk : this.main).subscribe(topic, messageType, callback, throttleRate);
+    if (!BULK_TYPES.has(messageType)) return this.main.subscribe(topic, messageType, callback, throttleRate);
+    const entry = { topic, type: messageType, cb: callback, throttle: throttleRate, handle: this.bulk.subscribe(topic, messageType, callback, throttleRate) };
+    this.bulkSubs.add(entry);
+    return { unsubscribe: () => { this.bulkSubs.delete(entry); entry.handle.unsubscribe(); } };
   }
 
   publish(topic: string, messageType: string, msg: any): void { this.main.publish(topic, messageType, msg); }
@@ -483,6 +547,6 @@ export class SplitFoxgloveTransport implements Transport {
     if (this.bulk === this.main) return a;
     const b = this.bulk.takeLinkSample();
     // Same two clocks on both connections, so the smaller baseline applies to both.
-    return { minOffsetMs: Math.min(a.minOffsetMs, b.minOffsetMs), topics: [...a.topics, ...b.topics] };
+    return { minOffsetMs: Math.min(a.minOffsetMs, b.minOffsetMs), topics: [...a.topics, ...b.topics], resets: this.resets };
   }
 }
