@@ -1,6 +1,9 @@
 {
-  "platforms": ["android"],
+  "platforms": ["android", "ios"],
   "android": {
     "modules": ["expo.modules.binarywebsocket.ExpoBinaryWebSocketModule"]
+  },
+  "ios": {
+    "modules": ["ExpoBinaryWebSocketModule"]
   }
 }

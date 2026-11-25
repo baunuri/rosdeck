@@ -9,7 +9,7 @@ type Native = {
   addListener(event: string, listener: (e: any) => void): { remove(): void };
 };
 
-// null when the native module isn't in this build (iOS for now, web, tests).
+// null when the native module isn't in this build (web, tests).
 const native = requireOptionalNativeModule<Native>('ExpoBinaryWebSocket');
 export const isBinaryWebSocketAvailable = native != null;
 
