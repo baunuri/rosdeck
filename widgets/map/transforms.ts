@@ -100,3 +100,37 @@ export function canvasToWorld(
   const worldY = mapInfo.origin.y + (mapInfo.height - gridY) * mapInfo.resolution;
   return [worldX, worldY];
 }
+
+/** 256-entry RGBA lookup (packed little-endian) indexed by the int8 cell value's byte. */
+function buildLut(toRgba: (value: number) => [number, number, number, number]): Uint32Array {
+  const lut = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    const [r, g, b, a] = toRgba(i > 127 ? i - 256 : i);
+    lut[i] = ((a << 24) | (b << 16) | (g << 8) | r) >>> 0;
+  }
+  return lut;
+}
+export const OCCUPANCY_LUT = buildLut(occupancyToRgba);
+export const COSTMAP_LUT = buildLut((v) => costmapToRgba(v, 255));
+
+/**
+ * Same pixels as occupancyGridToPixels / costmapGridToPixels (rows flipped so row 0 is
+ * the grid's max-y edge), but one table lookup and one 32-bit write per cell, and grids
+ * larger than `maxSide` are point-sampled down for display (also keeps them under the
+ * GPU's texture size limit). The per-cell array version took >1 s per large costmap.
+ * ponytail: assumes a little-endian device (every Android/iOS target).
+ */
+export function gridToRgbaFast(
+  data: ArrayLike<number>, width: number, height: number, lut: Uint32Array, maxSide = 1024,
+): { pixels: Uint8Array; width: number; height: number } {
+  const step = Math.max(1, Math.ceil(Math.max(width, height) / maxSide));
+  const w = Math.ceil(width / step);
+  const h = Math.ceil(height / step);
+  const out = new Uint32Array(w * h);
+  for (let row = 0; row < h; row++) {
+    const src = (h - 1 - row) * step * width; // output row r covers the block starting at grid row (h-1-r)·step
+    const dst = row * w;
+    for (let col = 0; col < w; col++) out[dst + col] = lut[(data[src + col * step] ?? -1) & 0xff];
+  }
+  return { pixels: new Uint8Array(out.buffer), width: w, height: h };
+}

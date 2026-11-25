@@ -93,3 +93,25 @@ describe('worldToCanvas / canvasToWorld', () => {
     expect(ry).toBeCloseTo(wy);
   });
 });
+
+describe('gridToRgbaFast', () => {
+  const { gridToRgbaFast, OCCUPANCY_LUT, COSTMAP_LUT, occupancyGridToPixels, costmapGridToPixels } = require('../../../widgets/map/transforms');
+  const data = Int8Array.from([-1, 0, 50, 100, 99, 1, 30, -1, 0, 75, 100, 10]);
+
+  it('matches occupancyGridToPixels exactly', () => {
+    expect(Array.from(gridToRgbaFast(data, 4, 3, OCCUPANCY_LUT).pixels)).toEqual(Array.from(occupancyGridToPixels(data as any, 4, 3)));
+  });
+
+  it('matches costmapGridToPixels exactly', () => {
+    expect(Array.from(gridToRgbaFast(data, 4, 3, COSTMAP_LUT).pixels)).toEqual(Array.from(costmapGridToPixels(data as any, 4, 3, 255)));
+  });
+
+  it('samples large grids down to maxSide, keeping corner cells', () => {
+    const big = new Int8Array(8 * 4).fill(0);
+    big[0] = 100; // grid (0,0): bottom-left, ends up in the last output row
+    const out = gridToRgbaFast(big, 8, 4, OCCUPANCY_LUT, 4);
+    expect([out.width, out.height]).toEqual([4, 2]);
+    const lastRowFirstPixel = Array.from(out.pixels.slice((1 * 4) * 4, (1 * 4) * 4 + 4));
+    expect(lastRowFirstPixel).toEqual([255, 255, 255, 255]);
+  });
+});
