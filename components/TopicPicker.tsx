@@ -10,9 +10,11 @@ interface Props {
   value: string;
   filterMessageTypes?: string[];
   onSelect: (topic: string) => void;
+  /** Pick several topics; value/onSelect carry them comma-separated. */
+  multiple?: boolean;
 }
 
-export function TopicPicker({ value, filterMessageTypes, onSelect }: Props) {
+export function TopicPicker({ value, filterMessageTypes, onSelect, multiple }: Props) {
   const [topics, setTopics] = useState<TopicInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -40,10 +42,22 @@ export function TopicPicker({ value, filterMessageTypes, onSelect }: Props) {
     if (expanded) discover();
   }, [expanded]);
 
+  const selected = multiple ? value.split(',').map((t) => t.trim()).filter(Boolean) : [value];
+  const placeholder = multiple ? 'Select topics...' : 'Select topic...';
+  const shown = multiple ? selected.join(', ') : value;
+  /** Single: pick and close. Multiple: toggle (or add, for typed names) and stay open. */
+  const choose = (name: string, add = false) => {
+    setManualEntry('');
+    if (!multiple) { onSelect(name); setExpanded(false); return; }
+    const on = selected.includes(name);
+    if (on && add) return;
+    onSelect((on ? selected.filter((t) => t !== name) : [...selected, name]).join(', '));
+  };
+
   if (!expanded) {
     return (
       <TouchableOpacity style={styles.collapsed} onPress={() => setExpanded(true)}>
-        <Text style={styles.topicValue}>{value || 'Select topic...'}</Text>
+        <Text style={styles.topicValue}>{shown || placeholder}</Text>
         <Ionicons name="chevron-down" size={16} color={theme.colors.textMuted} />
       </TouchableOpacity>
     );
@@ -52,7 +66,7 @@ export function TopicPicker({ value, filterMessageTypes, onSelect }: Props) {
   return (
     <View style={styles.container}>
       <TouchableOpacity style={styles.header} onPress={() => setExpanded(false)}>
-        <Text style={styles.topicValue}>{value || 'Select topic...'}</Text>
+        <Text style={styles.topicValue}>{shown || placeholder}</Text>
         <Ionicons name="chevron-up" size={16} color={theme.colors.textMuted} />
       </TouchableOpacity>
 
@@ -70,11 +84,7 @@ export function TopicPicker({ value, filterMessageTypes, onSelect }: Props) {
           <TouchableOpacity
             style={[styles.manualButton, !manualEntry.trim() && styles.disabled]}
             onPress={() => {
-              if (manualEntry.trim()) {
-                onSelect(manualEntry.trim());
-                setManualEntry('');
-                setExpanded(false);
-              }
+              if (manualEntry.trim()) choose(manualEntry.trim(), true);
             }}
             disabled={!manualEntry.trim()}
           >
@@ -86,25 +96,33 @@ export function TopicPicker({ value, filterMessageTypes, onSelect }: Props) {
           <ActivityIndicator color={theme.colors.accentPrimary} style={styles.loader} />
         ) : (() => {
           const query = manualEntry.trim().toLowerCase();
+          // Selected topics the bridge doesn't list (yet) stay visible so they can be removed.
+          const missing = multiple ? selected.filter((n) => !topics.some((t) => t.name === n)).map((name) => ({ name, type: 'not advertised' })) : [];
+          const all = [...missing, ...topics];
           const visible = query
-            ? topics.filter((t) => t.name.toLowerCase().includes(query) || t.type.toLowerCase().includes(query))
-            : topics;
+            ? all.filter((t) => t.name.toLowerCase().includes(query) || t.type.toLowerCase().includes(query))
+            : all;
           return visible.length > 0 ? (
             <ScrollView style={styles.list} nestedScrollEnabled>
               {visible.map((t) => (
                 <TouchableOpacity
                   key={t.name}
-                  style={[styles.topicItem, t.name === value && styles.topicItemActive]}
-                  onPress={() => { onSelect(t.name); setManualEntry(''); setExpanded(false); }}
+                  style={[styles.topicItem, selected.includes(t.name) && styles.topicItemActive]}
+                  onPress={() => choose(t.name)}
                 >
-                  <Text style={styles.topicName}>{t.name}</Text>
+                  <View style={styles.topicRow}>
+                    <Text style={styles.topicName}>{t.name}</Text>
+                    {multiple && selected.includes(t.name) && (
+                      <Ionicons name="checkmark" size={14} color={theme.colors.accentPrimary} />
+                    )}
+                  </View>
                   <Text style={styles.topicType}>{t.type}</Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
           ) : (
             <Text style={styles.emptyText}>
-              {topics.length > 0 ? 'No matching topics.' : 'No topics found. Enter manually above.'}
+              {all.length > 0 ? 'No matching topics.' : 'No topics found. Enter manually above.'}
             </Text>
           );
         })()}
@@ -165,6 +183,11 @@ const styles = StyleSheet.create({
   },
   topicItemActive: {
     backgroundColor: theme.colors.accentPrimaryMuted,
+  },
+  topicRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   topicName: {
     fontFamily: 'SpaceMono',

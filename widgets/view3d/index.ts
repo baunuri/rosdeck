@@ -44,7 +44,7 @@ export const view3dWidget: WidgetDefinition = {
     { key: 'localCostmapTopic', label: 'Local Costmap', type: 'topic', topicMessageTypes: GRID },
     { key: 'costmapOpacity', label: 'Costmap Opacity', type: 'slider', min: 0.1, max: 1, step: 0.1 },
     { key: 'scanTopic', label: 'Laser Scan', type: 'topic', topicMessageTypes: ['sensor_msgs/msg/LaserScan'] },
-    { key: 'cloudTopic', label: 'Point Clouds (comma-separated)', type: 'text', placeholder: '/points, /camera/points' },
+    { key: 'cloudTopic', label: 'Point Clouds', type: 'topic', multiple: true, topicMessageTypes: ['sensor_msgs/msg/PointCloud2'] },
     { key: 'accumulate', label: 'Accumulate Cloud (build a map)', type: 'boolean' },
     { key: 'pathTopic', label: 'Path', type: 'topic', topicMessageTypes: ['nav_msgs/msg/Path'] },
     { key: 'footprintTopic', label: 'Robot Footprint', type: 'topic', topicMessageTypes: ['geometry_msgs/msg/PolygonStamped'] },

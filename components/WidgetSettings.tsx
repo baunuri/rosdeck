@@ -277,6 +277,7 @@ export function WidgetSettings({ visible, widgetName, configSchema, config, onCo
             <TopicPicker
               value={draft[field.key] || ''}
               filterMessageTypes={field.topicMessageTypes}
+              multiple={field.multiple}
               onSelect={(topic) => updateDraft(field.key, topic)}
             />
           </View>
