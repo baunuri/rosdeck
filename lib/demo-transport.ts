@@ -16,7 +16,22 @@ const DEMO_TOPICS: TopicInfo[] = [
   { name: "/odom", type: "nav_msgs/msg/Odometry" },
   { name: '/imu/data', type: 'sensor_msgs/msg/Imu' },
   { name: '/imu/mag', type: 'sensor_msgs/msg/MagneticField' },
+  { name: '/tf', type: 'tf2_msgs/msg/TFMessage' },
+  { name: '/tf_static', type: 'tf2_msgs/msg/TFMessage' },
 ];
+
+/** The demo robot's wandering pose in odom; shared by /odom and /tf so every widget agrees. */
+function demoPose(t: number) {
+  return {
+    position: { x: Math.sin(t * 0.3) * 2, y: Math.cos(t * 0.2) * 1.5, z: 0 },
+    orientation: { x: 0, y: 0, z: Math.sin(t * 0.15), w: Math.cos(t * 0.15) },
+  };
+}
+
+function header(frameId: string) {
+  const now = Date.now();
+  return { stamp: { sec: Math.floor(now / 1000), nanosec: (now % 1000) * 1_000_000 }, frame_id: frameId };
+}
 
 export class DemoTransport implements Transport {
   private status: TransportStatus = "disconnected";
@@ -158,6 +173,7 @@ export class DemoTransport implements Transport {
     switch (topic) {
       case "/map":
         return {
+          header: header("map"),
           info: {
             resolution: 0.05,
             width: 200,
@@ -183,6 +199,9 @@ export class DemoTransport implements Transport {
         };
       case "/scan":
         return {
+          header: header("base_link"),
+          range_min: 0.1,
+          range_max: 10,
           angle_min: -1.57,
           angle_max: 1.57,
           angle_increment: 0.0175,
@@ -210,21 +229,9 @@ export class DemoTransport implements Transport {
       case "/odom": {
         const t3 = Date.now() / 1000;
         return {
-          pose: {
-            pose: {
-              position: {
-                x: Math.sin(t3 * 0.3) * 2,
-                y: Math.cos(t3 * 0.2) * 1.5,
-                z: 0,
-              },
-              orientation: {
-                x: 0,
-                y: 0,
-                z: Math.sin(t3 * 0.15),
-                w: Math.cos(t3 * 0.15),
-              },
-            },
-          },
+          header: header("odom"),
+          child_frame_id: "base_link",
+          pose: { pose: demoPose(t3) },
           twist: {
             twist: {
               linear: { x: Math.cos(t3 * 0.3) * 0.6, y: 0, z: 0 },
@@ -276,6 +283,18 @@ export class DemoTransport implements Transport {
           },
         };
       }
+      case "/tf": {
+        const { position, orientation } = demoPose(Date.now() / 1000);
+        return { transforms: [{
+          header: header("odom"), child_frame_id: "base_link",
+          transform: { translation: position, rotation: orientation },
+        }] };
+      }
+      case "/tf_static":
+        return { transforms: [{
+          header: header("map"), child_frame_id: "odom",
+          transform: { translation: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0, w: 1 } },
+        }] };
       default:
         return {};
     }

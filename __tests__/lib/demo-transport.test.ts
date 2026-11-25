@@ -77,3 +77,17 @@ describe('DemoTransport', () => {
     expect(typeof unsub).toBe('function');
   });
 });
+
+describe('DemoTransport TF consistency', () => {
+  it('publishes /tf odom->base_link matching /odom, and map->odom on /tf_static', () => {
+    const t = new DemoTransport() as any;
+    const odom = t.buildDemoMessage('/odom');
+    const tf = t.buildDemoMessage('/tf').transforms[0];
+    expect(tf.header.frame_id).toBe('odom');
+    expect(tf.child_frame_id).toBe('base_link');
+    expect(tf.transform.translation.x).toBeCloseTo(odom.pose.pose.position.x, 2);
+    expect(t.buildDemoMessage('/tf_static').transforms[0].child_frame_id).toBe('odom');
+    expect(t.buildDemoMessage('/scan').header.frame_id).toBe('base_link');
+    expect(t.buildDemoMessage('/map').header.frame_id).toBe('map');
+  });
+});
