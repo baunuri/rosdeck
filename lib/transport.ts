@@ -1,4 +1,5 @@
 // lib/transport.ts
+import type { LinkSample } from './link-health';
 
 export interface Subscription {
   unsubscribe: () => void;
@@ -19,6 +20,8 @@ export interface Transport {
   getTopics(): Promise<TopicInfo[]>;
   onStatus(callback: (status: TransportStatus, error?: string) => void): () => void;
   getStatus(): TransportStatus;
+  /** Arrival stats for the lag banner (foxglove only: rosbridge messages carry no send time). */
+  takeLinkSample?(): LinkSample;
 }
 
 export type TransportType = 'rosbridge' | 'foxglove' | 'demo';

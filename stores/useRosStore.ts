@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { ConnectionStatus, SavedConnection } from '../types/ros';
 import type { Transport, TransportType } from '../lib/transport';
 import { RosbridgeTransport } from '../lib/rosbridge-transport';
-import { FoxgloveTransport } from '../lib/foxglove-transport';
+import { SplitFoxgloveTransport } from '../lib/foxglove-transport';
 import { DemoTransport } from '../lib/demo-transport';
 import { DEFAULTS } from '../constants/defaults';
 
@@ -116,7 +116,7 @@ export const useRosStore = create<RosStore>((set, get) => ({
     const transport = transportType === 'demo'
       ? new DemoTransport()
       : transportType === 'foxglove'
-        ? new FoxgloveTransport()
+        ? new SplitFoxgloveTransport()
         : new RosbridgeTransport();
 
     const unsub = transport.onStatus((status, error) => {

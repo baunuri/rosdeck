@@ -3,6 +3,7 @@ import { MessageReader } from '@foxglove/rosmsg2-serialization';
 import { parse as parseMessageDefinition } from '@foxglove/rosmsg';
 import { createBinaryWebSocket } from './binary-websocket';
 import { isJazzyMarkerSchema, parseMarkerArrayFast } from './marker-cdr';
+import type { LinkSample } from './link-health';
 
 /**
  * A topic whose messages take T ms to decode is delivered at most once per DECODE_BACKOFF×T ms,
@@ -16,6 +17,10 @@ export class FoxgloveTransport implements Transport {
   private status: TransportStatus = 'disconnected';
   private statusListeners: Array<(status: TransportStatus, error?: string) => void> = [];
   private decodeMs = new Map<string, number>();
+  // Lag tracking (see lib/link-health.ts): per topic, the latest (local now − bridge timestamp)
+  // and bytes received since the last takeLinkSample().
+  private arrivals = new Map<string, { offsetMs: number; bytes: number; seenAt: number }>();
+  private minOffsetMs = Infinity;
   private subscriptions: Map<number, {
     topic: string; messageType: string; callback: (msg: any) => void;
     throttleMs: number; lastDelivered: number;
@@ -36,6 +41,13 @@ export class FoxgloveTransport implements Transport {
 
   getStatus(): TransportStatus {
     return this.status;
+  }
+
+  /** Arrival stats since the previous call (byte counters reset). One caller: the lag banner. */
+  takeLinkSample(): LinkSample {
+    const topics = [...this.arrivals].map(([topic, a]) => ({ topic, offsetMs: a.offsetMs, bytes: a.bytes, seenAt: a.seenAt }));
+    for (const a of this.arrivals.values()) a.bytes = 0;
+    return { minOffsetMs: this.minOffsetMs, topics };
   }
 
   private setStatus(status: TransportStatus, error?: string) {
@@ -137,8 +149,18 @@ export class FoxgloveTransport implements Transport {
     const topic = this.bridgeSubToTopic.get(subscriptionId);
     if (!topic) return;
 
-    // Throttled or unwanted messages are dropped before any copy or deserialization.
+    // Every frame counts toward lag/bandwidth, throttled or not: it already crossed the link.
     const now = Date.now();
+    const offsetMs = now - Number(view.getBigUint64(5, true)) / 1e6;
+    if (offsetMs < this.minOffsetMs) this.minOffsetMs = offsetMs;
+    const arrival = this.arrivals.get(topic);
+    if (arrival) {
+      arrival.offsetMs = offsetMs; arrival.bytes += bytes.byteLength; arrival.seenAt = now;
+    } else {
+      this.arrivals.set(topic, { offsetMs, bytes: bytes.byteLength, seenAt: now });
+    }
+
+    // Throttled or unwanted messages are dropped before any copy or deserialization.
     const due = this.dueSubscribers(topic, now);
     if (due.length === 0) return;
 
@@ -199,7 +221,9 @@ export class FoxgloveTransport implements Transport {
   private dueSubscribers(topic: string, now: number) {
     const schemaName = this.getChannelForTopic(topic)?.schemaName;
     // Back off topics that are expensive to decode so they can't monopolise the JS thread.
-    const minGap = DECODE_BACKOFF * (this.decodeMs.get(topic) ?? 0);
+    // Never TF: each message may carry different transforms (/tf_static has one latched message
+    // per publisher, back to back), so a skipped one can lose a link of the tree for good.
+    const minGap = schemaName === 'tf2_msgs/msg/TFMessage' ? 0 : DECODE_BACKOFF * (this.decodeMs.get(topic) ?? 0);
     return [...this.subscriptions.values()].filter((s) =>
       s.topic === topic &&
       (!schemaName || s.messageType === schemaName) &&
@@ -313,6 +337,8 @@ export class FoxgloveTransport implements Transport {
     this.schemaDefinitions.clear();
     this.topicBridgeSub.clear();
     this.bridgeSubToTopic.clear();
+    this.arrivals.clear();
+    this.minOffsetMs = Infinity;
     this.setStatus('disconnected');
   }
 
@@ -411,5 +437,52 @@ export class FoxgloveTransport implements Transport {
     return () => {
       this.statusListeners = this.statusListeners.filter((cb) => cb !== callback);
     };
+  }
+}
+
+/**
+ * Message types big enough to back up the link. foxglove_bridge queues each client's messages
+ * in one FIFO, so a backed-up point cloud stream delays everything behind it, /tf included.
+ * These get a second connection (own bridge queue, own TCP stream); everything else, plus
+ * publishing, stays on the first, so the robot pose and small topics stay current.
+ */
+const BULK_TYPES = new Set([
+  'sensor_msgs/msg/PointCloud2', 'sensor_msgs/msg/Image', 'sensor_msgs/msg/CompressedImage',
+  'foxglove_msgs/msg/CompressedVideo', 'nav_msgs/msg/OccupancyGrid', 'visualization_msgs/msg/MarkerArray',
+]);
+
+export class SplitFoxgloveTransport implements Transport {
+  private main = new FoxgloveTransport();
+  private bulk = new FoxgloveTransport();
+
+  async connect(url: string): Promise<void> {
+    const [main, bulk] = await Promise.allSettled([this.main.connect(url), this.bulk.connect(url)]);
+    if (main.status === 'rejected') { this.bulk.disconnect(); throw main.reason; }
+    // ponytail: no second connection (e.g. a client limit) → everything shares the first.
+    if (bulk.status === 'rejected') this.bulk = this.main;
+    // Losing either connection loses its topics: treat it as losing the robot, so reconnect covers both.
+    else this.bulk.onStatus((s) => { if (s === 'disconnected' || s === 'error') this.main.disconnect(); });
+  }
+
+  disconnect(): void {
+    this.main.disconnect();
+    if (this.bulk !== this.main) this.bulk.disconnect();
+  }
+
+  subscribe(topic: string, messageType: string, callback: (msg: any) => void, throttleRate?: number): Subscription {
+    return (BULK_TYPES.has(messageType) ? this.bulk : this.main).subscribe(topic, messageType, callback, throttleRate);
+  }
+
+  publish(topic: string, messageType: string, msg: any): void { this.main.publish(topic, messageType, msg); }
+  getTopics(): Promise<TopicInfo[]> { return this.main.getTopics(); }
+  onStatus(cb: (status: TransportStatus, error?: string) => void): () => void { return this.main.onStatus(cb); }
+  getStatus(): TransportStatus { return this.main.getStatus(); }
+
+  takeLinkSample(): LinkSample {
+    const a = this.main.takeLinkSample();
+    if (this.bulk === this.main) return a;
+    const b = this.bulk.takeLinkSample();
+    // Same two clocks on both connections, so the smaller baseline applies to both.
+    return { minOffsetMs: Math.min(a.minOffsetMs, b.minOffsetMs), topics: [...a.topics, ...b.topics] };
   }
 }

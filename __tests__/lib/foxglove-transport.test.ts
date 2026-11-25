@@ -74,3 +74,40 @@ describe('FoxgloveTransport decode backoff', () => {
     expect(received).toHaveLength(2);
   });
 });
+
+describe('FoxgloveTransport link sample', () => {
+  it('records each topic\'s bridge-timestamp offset and bytes, then resets the byte count', () => {
+    let now = 10_000;
+    jest.spyOn(Date, 'now').mockImplementation(() => now);
+    const t = new FoxgloveTransport() as any;
+    t.serverChannels.set(7, { topic: '/a', schemaName: 'test/Msg', encoding: 'json' });
+    t.topicToChannelId.set('/a', 7);
+    t.subscribe('/a', 'test/Msg', () => {});
+    const f = frame(1, { n: 1 });
+    new DataView(f.buffer).setBigUint64(5, BigInt(9_000) * 1_000_000n, true); // stamped at t=9000 ms
+    t.handleBinaryMessage(f);
+    const s = t.takeLinkSample();
+    expect(s.minOffsetMs).toBe(1000);
+    expect(s.topics[0]).toMatchObject({ topic: '/a', offsetMs: 1000, bytes: f.length });
+    expect(t.takeLinkSample().topics[0].bytes).toBe(0);
+    jest.restoreAllMocks();
+  });
+});
+
+describe('FoxgloveTransport TF delivery', () => {
+  it('never backs off TF: each message may carry different transforms (e.g. two /tf_static publishers)', () => {
+    let now = 1000;
+    jest.spyOn(Date, 'now').mockImplementation(() => now);
+    const t = new FoxgloveTransport() as any;
+    t.serverChannels.set(3, { topic: '/tf_static', schemaName: 'tf2_msgs/msg/TFMessage', encoding: 'cdr' });
+    t.topicToChannelId.set('/tf_static', 3);
+    t.messageReaders.set('tf2_msgs/msg/TFMessage', { readMessage: () => { now += 50; return { transforms: [] }; } }); // slow (cold) decode
+    const received: any[] = [];
+    t.subscribe('/tf_static', 'tf2_msgs/msg/TFMessage', (m: any) => received.push(m));
+    const f = new Uint8Array(20); f[0] = 0x01; new DataView(f.buffer).setUint32(1, 1, true);
+    t.handleBinaryMessage(f);
+    t.handleBinaryMessage(f); // the second publisher's latched message, right behind the first
+    expect(received).toHaveLength(2);
+    jest.restoreAllMocks();
+  });
+});

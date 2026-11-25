@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { LinkHealthBanner } from "../../components/LinkHealthBanner";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
@@ -234,6 +235,8 @@ export default function ControlScreen() {
           />
         </TouchableOpacity>
       )}
+
+      {status === "connected" && <LinkHealthBanner />}
 
       {status !== "connected" ? (
         <View style={styles.disconnected}>
