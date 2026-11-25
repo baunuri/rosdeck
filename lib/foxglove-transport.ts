@@ -1,12 +1,16 @@
 import type { Transport, Subscription, TopicInfo, TransportStatus } from './transport';
 import { MessageReader } from '@foxglove/rosmsg2-serialization';
 import { parse as parseMessageDefinition } from '@foxglove/rosmsg';
+import { createBinaryWebSocket } from './binary-websocket';
 
 export class FoxgloveTransport implements Transport {
   private ws: WebSocket | null = null;
   private status: TransportStatus = 'disconnected';
   private statusListeners: Array<(status: TransportStatus, error?: string) => void> = [];
-  private subscriptions: Map<number, { topic: string; messageType: string; callback: (msg: any) => void }> = new Map();
+  private subscriptions: Map<number, {
+    topic: string; messageType: string; callback: (msg: any) => void;
+    throttleMs: number; lastDelivered: number;
+  }> = new Map();
   private nextSubId = 1;
   private serverChannels: Map<number, { topic: string; schemaName: string; encoding?: string }> = new Map();
   private topicToChannelId: Map<string, number> = new Map();
@@ -41,12 +45,10 @@ export class FoxgloveTransport implements Transport {
       }, 5000);
 
       // foxglove_bridge 3.x uses 'foxglove.sdk.v1' subprotocol.
-      // React Native on Android needs it passed as a custom header.
-      const ws = new (WebSocket as any)(url, undefined, {
-        headers: { 'Sec-WebSocket-Protocol': 'foxglove.sdk.v1' },
-      }) as WebSocket;
+      // Standard protocols argument: RN forwards it natively and browsers honor it
+      // (browsers ignore the RN-only `headers` option).
+      const ws = createBinaryWebSocket(url, ['foxglove.sdk.v1']);
       this.ws = ws;
-      ws.binaryType = 'arraybuffer';
 
       ws.onopen = () => {
         clearTimeout(timeout);
@@ -54,10 +56,12 @@ export class FoxgloveTransport implements Transport {
         resolve();
       };
 
-      ws.onerror = () => {
+      ws.onerror = (event: any) => {
         clearTimeout(timeout);
-        this.setStatus('error', 'Connection error');
-        reject(new Error('Connection error'));
+        // RN's error event carries `message`; browsers' carries nothing useful.
+        const message = event?.message ? `Connection error: ${event.message}` : 'Connection error';
+        this.setStatus('error', message);
+        reject(new Error(message));
       };
 
       ws.onclose = () => {
@@ -125,17 +129,15 @@ export class FoxgloveTransport implements Transport {
     if (!topic) return;
 
     // SDK v1: opcode(1) + subId(4) + timestamp(8) = 13 byte header
-    const payloadBytes = new Uint8Array(bytes.buffer.slice(bytes.byteOffset + 13));
+    // Bounded slice: `bytes` may be a view into a larger buffer (batched frames).
+    const payloadBytes = new Uint8Array(bytes.buffer.slice(bytes.byteOffset + 13, bytes.byteOffset + bytes.byteLength));
     const channelInfo = this.getChannelForTopic(topic);
 
     // Skip expensive deserialization if no subscriber wants this channel's schema.
     // e.g. camera subscribes for CompressedImage but topic publishes raw Image.
-    if (channelInfo?.schemaName) {
-      const wantedByAnyone = [...this.subscriptions.values()].some(
-        (s) => s.topic === topic && s.messageType === channelInfo.schemaName,
-      );
-      if (!wantedByAnyone) return;
-    }
+    const now = Date.now();
+    const due = this.dueSubscribers(topic, now);
+    if (due.length === 0) return;
 
     let parsedMsg: any;
     if (channelInfo?.encoding === 'cdr' && channelInfo.schemaName) {
@@ -162,11 +164,23 @@ export class FoxgloveTransport implements Transport {
     // whose subId the bridge used. This is necessary because foxglove_bridge
     // may only ever send messages tagged with the first subscription ID for a
     // given channel, ignoring subsequent ones from the same client.
-    for (const [, sub] of this.subscriptions) {
-      if (sub.topic === topic && (!channelInfo?.schemaName || sub.messageType === channelInfo.schemaName)) {
-        try { sub.callback(parsedMsg); } catch {}
-      }
+    for (const sub of due) {
+      sub.lastDelivered = now;
+      try { sub.callback(parsedMsg); } catch {}
     }
+  }
+
+  /**
+   * Subscribers wanting this topic's next message. Same semantics as rosbridge's
+   * throttle_rate, enforced client-side before deserialization so large messages
+   * (point clouds) are cheap to drop.
+   */
+  private dueSubscribers(topic: string, now: number) {
+    const schemaName = this.getChannelForTopic(topic)?.schemaName;
+    return [...this.subscriptions.values()].filter((s) =>
+      s.topic === topic &&
+      (!schemaName || s.messageType === schemaName) &&
+      now - s.lastDelivered >= s.throttleMs);
   }
 
   private getChannelForTopic(topic: string): { encoding?: string; schemaName?: string } | undefined {
@@ -279,9 +293,9 @@ export class FoxgloveTransport implements Transport {
     this.setStatus('disconnected');
   }
 
-  subscribe(topic: string, messageType: string, callback: (msg: any) => void, _throttleRate?: number): Subscription {
+  subscribe(topic: string, messageType: string, callback: (msg: any) => void, throttleRate?: number): Subscription {
     const subId = this.nextSubId++;
-    this.subscriptions.set(subId, { topic, messageType, callback });
+    this.subscriptions.set(subId, { topic, messageType, callback, throttleMs: throttleRate ?? 0, lastDelivered: 0 });
 
     if (!this.topicBridgeSub.has(topic)) {
       // First subscriber for this topic — create the bridge-level subscription.
