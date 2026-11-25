@@ -2,11 +2,20 @@ import type { Transport, Subscription, TopicInfo, TransportStatus } from './tran
 import { MessageReader } from '@foxglove/rosmsg2-serialization';
 import { parse as parseMessageDefinition } from '@foxglove/rosmsg';
 import { createBinaryWebSocket } from './binary-websocket';
+import { isJazzyMarkerSchema, parseMarkerArrayFast } from './marker-cdr';
+
+/**
+ * A topic whose messages take T ms to decode is delivered at most once per DECODE_BACKOFF×T ms,
+ * capping it at ~20% of the JS thread. Hermes decodes a 7.6k-marker MarkerArray in ~1 s; at its
+ * native 14 Hz that froze the app. Cheap topics (T ≈ 0) are unaffected.
+ */
+const DECODE_BACKOFF = 5;
 
 export class FoxgloveTransport implements Transport {
   private ws: WebSocket | null = null;
   private status: TransportStatus = 'disconnected';
   private statusListeners: Array<(status: TransportStatus, error?: string) => void> = [];
+  private decodeMs = new Map<string, number>();
   private subscriptions: Map<number, {
     topic: string; messageType: string; callback: (msg: any) => void;
     throttleMs: number; lastDelivered: number;
@@ -128,16 +137,15 @@ export class FoxgloveTransport implements Transport {
     const topic = this.bridgeSubToTopic.get(subscriptionId);
     if (!topic) return;
 
+    // Throttled or unwanted messages are dropped before any copy or deserialization.
+    const now = Date.now();
+    const due = this.dueSubscribers(topic, now);
+    if (due.length === 0) return;
+
     // SDK v1: opcode(1) + subId(4) + timestamp(8) = 13 byte header
     // Bounded slice: `bytes` may be a view into a larger buffer (batched frames).
     const payloadBytes = new Uint8Array(bytes.buffer.slice(bytes.byteOffset + 13, bytes.byteOffset + bytes.byteLength));
     const channelInfo = this.getChannelForTopic(topic);
-
-    // Skip expensive deserialization if no subscriber wants this channel's schema.
-    // e.g. camera subscribes for CompressedImage but topic publishes raw Image.
-    const now = Date.now();
-    const due = this.dueSubscribers(topic, now);
-    if (due.length === 0) return;
 
     let parsedMsg: any;
     if (channelInfo?.encoding === 'cdr' && channelInfo.schemaName) {
@@ -147,12 +155,25 @@ export class FoxgloveTransport implements Transport {
         try {
           parsedMsg = this.parseCompressedImageFast(payloadBytes);
         } catch { return; }
+      } else if (channelInfo.schemaName === 'visualization_msgs/msg/MarkerArray') {
+        // Generic decoding of large marker arrays takes ~1 s in Hermes (see lib/marker-cdr.ts).
+        const started = Date.now();
+        try {
+          const schema = this.schemaDefinitions.get(channelInfo.schemaName) ?? '';
+          parsedMsg = parseMarkerArrayFast(payloadBytes, isJazzyMarkerSchema(schema));
+        } catch { return; }
+        const took = Date.now() - started;
+        this.decodeMs.set(topic, 0.7 * (this.decodeMs.get(topic) ?? took) + 0.3 * took);
       } else {
         const reader = this.getMessageReader(channelInfo.schemaName);
         if (!reader) return;
+        const started = Date.now();
         try {
           parsedMsg = reader.readMessage(payloadBytes);
         } catch { return; }
+        // Smoothed decode time per topic (drives the backoff in dueSubscribers).
+        const took = Date.now() - started;
+        this.decodeMs.set(topic, 0.7 * (this.decodeMs.get(topic) ?? took) + 0.3 * took);
       }
     } else {
       try {
@@ -177,10 +198,12 @@ export class FoxgloveTransport implements Transport {
    */
   private dueSubscribers(topic: string, now: number) {
     const schemaName = this.getChannelForTopic(topic)?.schemaName;
+    // Back off topics that are expensive to decode so they can't monopolise the JS thread.
+    const minGap = DECODE_BACKOFF * (this.decodeMs.get(topic) ?? 0);
     return [...this.subscriptions.values()].filter((s) =>
       s.topic === topic &&
       (!schemaName || s.messageType === schemaName) &&
-      now - s.lastDelivered >= s.throttleMs);
+      now - s.lastDelivered >= Math.max(s.throttleMs, minGap));
   }
 
   private getChannelForTopic(topic: string): { encoding?: string; schemaName?: string } | undefined {

@@ -54,3 +54,23 @@ describe('FoxgloveTransport throttling', () => {
     expect(received.map((m) => m.n)).toEqual([1, 3]);
   });
 });
+
+describe('FoxgloveTransport decode backoff', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  it('spaces out a topic in proportion to its decode time', () => {
+    let now = 1000;
+    jest.spyOn(Date, 'now').mockImplementation(() => now);
+    const t = new FoxgloveTransport() as any;
+    t.serverChannels.set(7, { topic: '/heavy', schemaName: 'pkg/Heavy', encoding: 'cdr' });
+    t.topicToChannelId.set('/heavy', 7);
+    t.messageReaders.set('pkg/Heavy', { readMessage: () => { now += 100; return { ok: true }; } }); // 100 ms to decode
+    const received: any[] = [];
+    t.subscribe('/heavy', 'pkg/Heavy', (m: any) => received.push(m));
+    const frame = new Uint8Array(20); frame[0] = 0x01; new DataView(frame.buffer).setUint32(1, 1, true);
+    t.handleBinaryMessage(frame);          // decoded: 100 ms, so next allowed 500 ms later
+    now += 200; t.handleBinaryMessage(frame); // too soon: dropped before decoding
+    now += 400; t.handleBinaryMessage(frame); // 700 ms after the last delivery: decoded
+    expect(received).toHaveLength(2);
+  });
+});

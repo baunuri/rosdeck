@@ -1,6 +1,9 @@
 import ExpoModulesCore
 import Foundation
 
+/// Most bytes queued for JS; when JS falls behind, the oldest frames are dropped (see Android).
+private let maxQueuedBytes = 32 * 1024 * 1024
+
 /**
  WebSocket whose binary frames reach JS as a Uint8Array (one copy) instead of React
  Native's base64 strings. Same contract as the Android module: binary frames queue
@@ -13,6 +16,8 @@ public class ExpoBinaryWebSocketModule: Module {
     let task: URLSessionWebSocketTask
     private let lock = NSLock()
     private var inbox: [Data] = []
+    private var inboxStart = 0 // index of the oldest live frame (dropping from the front is O(1))
+    private var queuedBytes = 0
     private var notified = false
     var closed = false
 
@@ -22,6 +27,12 @@ public class ExpoBinaryWebSocketModule: Module {
     func enqueue(_ data: Data) -> Bool {
       lock.lock(); defer { lock.unlock() }
       inbox.append(data)
+      queuedBytes += data.count
+      while queuedBytes > maxQueuedBytes && inboxStart < inbox.count - 1 {
+        queuedBytes -= inbox[inboxStart].count
+        inbox[inboxStart] = Data() // release the dropped frame's memory now
+        inboxStart += 1
+      }
       if notified { return false }
       notified = true
       return true
@@ -30,8 +41,10 @@ public class ExpoBinaryWebSocketModule: Module {
     func drainAll() -> [Data] {
       lock.lock(); defer { lock.unlock() }
       notified = false // frames arriving from here on trigger a new ping
-      let frames = inbox
+      let frames = Array(inbox[inboxStart...])
       inbox.removeAll(keepingCapacity: true)
+      inboxStart = 0
+      queuedBytes = 0
       return frames
     }
   }

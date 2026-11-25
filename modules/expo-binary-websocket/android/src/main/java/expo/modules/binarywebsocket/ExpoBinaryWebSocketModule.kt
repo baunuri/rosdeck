@@ -17,6 +17,14 @@ import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
+
+/**
+ * Most bytes queued for JS. When JS falls behind (e.g. a 27 MB/s marker topic), the oldest
+ * frames are dropped, like foxglove_bridge's send-buffer limit: a live view wants the newest
+ * data, and an unbounded queue made drain() itself run out of memory.
+ */
+private const val MAX_QUEUED_BYTES = 32L * 1024 * 1024
 
 /**
  * WebSocket whose binary frames reach JS as a Uint8Array (one copy) instead of
@@ -32,6 +40,7 @@ class ExpoBinaryWebSocketModule : Module() {
   private class Connection {
     lateinit var socket: WebSocket
     val inbox = ConcurrentLinkedQueue<ByteArray>()
+    val queuedBytes = AtomicLong(0)
     val notified = AtomicBoolean(false)
   }
 
@@ -73,7 +82,11 @@ class ExpoBinaryWebSocketModule : Module() {
       val connection = connections[id] ?: return@Function ByteArray(0)
       connection.notified.set(false) // frames arriving from here on trigger a new ping
       val frames = ArrayList<ByteArray>()
-      while (true) frames.add(connection.inbox.poll() ?: break)
+      while (true) {
+        val frame = connection.inbox.poll() ?: break
+        connection.queuedBytes.addAndGet(-frame.size.toLong())
+        frames.add(frame)
+      }
       val packed = ByteBuffer.allocate(frames.sumOf { 4 + it.size }).order(ByteOrder.LITTLE_ENDIAN)
       for (frame in frames) packed.putInt(frame.size).put(frame)
       packed.array()
@@ -98,7 +111,13 @@ class ExpoBinaryWebSocketModule : Module() {
 
     override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
       val connection = connections[id] ?: return
-      connection.inbox.add(bytes.toByteArray())
+      val frame = bytes.toByteArray()
+      connection.inbox.add(frame)
+      var queued = connection.queuedBytes.addAndGet(frame.size.toLong())
+      while (queued > MAX_QUEUED_BYTES) {
+        val dropped = connection.inbox.poll() ?: break
+        queued = connection.queuedBytes.addAndGet(-dropped.size.toLong())
+      }
       if (connection.notified.compareAndSet(false, true)) sendEvent("onBinary", mapOf("id" to id))
     }
 
