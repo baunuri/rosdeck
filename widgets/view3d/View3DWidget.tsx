@@ -6,10 +6,11 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { PixelRatio, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { theme } from '../../constants/theme';
+import * as Haptics from '../../lib/haptics';
 import { useRosStore } from '../../stores/useRosStore';
 import type { WidgetProps } from '../../types/layout';
 import { COSTMAP_LUT, gridToRgbaFast, OCCUPANCY_LUT } from '../map/transforms';
-import { viewProjection, type Camera } from './camera';
+import { unprojectGround, viewProjection, type Camera } from './camera';
 import { arrow, gridCorners, gridLines, laserScanToXyz, pathToXyz, yawOf } from './geometry';
 import { createSceneRenderer, type Rgba, type SceneRenderer, type TextureLayer } from './renderer';
 import {
@@ -38,7 +39,9 @@ const COLORS = {
   scan: rgba(theme.colors.accentPrimary),
   path: rgba('#FBBF24'),
   robot: rgba(theme.colors.statusConnected),
+  goal: rgba(theme.colors.statusError),
 };
+const GOAL_HOLD_MS = 450;
 
 interface GridLayer { pixels: Uint8Array; width: number; height: number; corners: Float32Array; frame: string; opacity: number }
 
@@ -55,6 +58,8 @@ export function View3DWidget(props: Partial<WidgetProps>) {
   const scanTopic: string = config.scanTopic ?? '/scan';
   const cloudTopic: string = config.cloudTopic ?? '';
   const pathTopic: string = config.pathTopic ?? '/plan';
+  const enableGoal = config.enableGoal ?? true;
+  const goalTopic: string = config.goalTopic || '/goal_pose';
   const accumulate = Boolean(config.accumulate);
   const showGrid = config.showGrid ?? true;
   const width = Math.max(1, props?.width || 300);
@@ -63,6 +68,7 @@ export function View3DWidget(props: Partial<WidgetProps>) {
   const [stats, setStats] = useState({ frame: '', fallback: false, robot: false, cloudPoints: 0, cloudBytes: 0 });
   const [follow, setFollowState] = useState(true);
   const [topDown, setTopDown] = useState(false);
+  const [placingGoal, setPlacingGoal] = useState(false);
 
   // Scene state lives in refs: data and gestures request a frame; React never re-renders per frame.
   const tracker = useRef(new TfPositionTracker()).current;
@@ -70,7 +76,8 @@ export function View3DWidget(props: Partial<WidgetProps>) {
   const rendererRef = useRef<SceneRenderer | null>(null);
   const grids = useRef<Partial<Record<TextureLayer, GridLayer>>>({}).current;
   const dirtyGrids = useRef(new Set<TextureLayer>()).current;
-  const pending = useRef<{ scan?: Float32Array | null; cloud?: { xyz: Float32Array; zMin: number; zMax: number } | null; path?: Float32Array | null }>({}).current;
+  const pending = useRef<{ scan?: Float32Array | null; cloud?: { xyz: Float32Array; zMin: number; zMax: number } | null; path?: Float32Array | null; goal?: Float32Array | null }>({}).current;
+  const goalDraft = useRef<{ x: number; y: number; yaw: number } | null>(null);
   const fixedRef = useRef(fixedFrame);
   const followRef = useRef(true);
   const cameraRef = useRef<Camera>({
@@ -126,6 +133,10 @@ export function View3DWidget(props: Partial<WidgetProps>) {
       const cloud = pending.cloud;
       renderer.setPoints('cloud', cloud?.xyz ?? null, cloud ? { color: COLORS.scan, size: 2 * PX, heightColored: true, zMin: cloud.zMin, zMax: cloud.zMax } : undefined);
       delete pending.cloud;
+    }
+    if (pending.goal !== undefined) {
+      renderer.setShape('goal', pending.goal, { color: COLORS.goal, mode: 'triangles' });
+      delete pending.goal;
     }
     if (pending.path !== undefined) {
       renderer.setShape('path', pending.path, { color: COLORS.path, mode: 'strip' });
@@ -298,8 +309,54 @@ export function View3DWidget(props: Partial<WidgetProps>) {
     const pinch = Gesture.Pinch().runOnJS(true).onStart(begin).onUpdate((e) => {
       setCamera({ ...cameraRef.current, viewMeters: Math.max(1, Math.min(500, gestureStart.current.viewMeters / e.scale)) });
     });
-    return Gesture.Simultaneous(orbit, pan, pinch);
-  }, [setCamera, setFollow]);
+    const view = Gesture.Simultaneous(orbit, pan, pinch);
+    if (!enableGoal) return view;
+
+    // RViz "2D Goal Pose": hold to place, drag to aim, release to send. Moving before the
+    // hold time elapses orbits instead (the two race).
+    const showGoal = () => {
+      const g = goalDraft.current;
+      pending.goal = g ? arrow(g.x, g.y, 0.06, g.yaw, 0.8, 0.45) : null;
+      dataVersion.current++;
+      requestDraw();
+    };
+    const goal = Gesture.Pan().maxPointers(1).activateAfterLongPress(GOAL_HOLD_MS).runOnJS(true)
+      .onStart((e) => {
+        const { width: w, height: h } = sizeRef.current;
+        const p = unprojectGround(cameraRef.current, w, h, e.x, e.y);
+        if (!p) return;
+        goalDraft.current = { x: p.x, y: p.y, yaw: 0 };
+        setPlacingGoal(true);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        showGoal();
+      })
+      .onUpdate((e) => {
+        const g = goalDraft.current;
+        if (!g) return;
+        const { width: w, height: h } = sizeRef.current;
+        const p = unprojectGround(cameraRef.current, w, h, e.x, e.y);
+        if (p && Math.hypot(p.x - g.x, p.y - g.y) > 0.05) g.yaw = Math.atan2(p.y - g.y, p.x - g.x);
+        showGoal();
+      })
+      .onEnd(() => {
+        const g = goalDraft.current;
+        if (!g || !transport) return;
+        const now = Date.now();
+        transport.publish(goalTopic, 'geometry_msgs/msg/PoseStamped', {
+          header: { stamp: { sec: Math.floor(now / 1000), nanosec: (now % 1000) * 1_000_000 }, frame_id: fixedRef.current },
+          pose: {
+            position: { x: g.x, y: g.y, z: 0 },
+            orientation: { x: 0, y: 0, z: Math.sin(g.yaw / 2), w: Math.cos(g.yaw / 2) },
+          },
+        });
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      })
+      .onFinalize(() => {
+        goalDraft.current = null; // the arrow stays until the next goal; only the draft ends
+        setPlacingGoal(false);
+      });
+    return Gesture.Race(goal, view);
+  }, [enableGoal, goalTopic, pending, requestDraw, setCamera, setFollow, transport]);
 
   const toggleTopDown = useCallback(() => {
     const next = !topDown;
@@ -329,6 +386,7 @@ export function View3DWidget(props: Partial<WidgetProps>) {
           {stats.frame || fixedFrame}{stats.fallback ? ` (no TF to ${fixedFrame})` : ''}
         </Text>
         {!stats.robot && <Text style={[styles.statsText, styles.warnText]}>waiting for TF → {robotFrame}</Text>}
+        {placingGoal && <Text style={[styles.statsText, styles.goalText]}>drag to aim · release to send goal</Text>}
         {stats.cloudPoints > 0 && <Text style={styles.statsText}>{stats.cloudPoints.toLocaleString()} pts</Text>}
         {stats.cloudBytes > LARGE_CLOUD_BYTES && (
           <Text style={[styles.statsText, styles.warnText]}>
@@ -404,6 +462,9 @@ const styles = StyleSheet.create({
     fontFamily: 'SpaceMono',
     fontSize: 9,
     marginTop: 2,
+  },
+  goalText: {
+    color: theme.colors.statusError,
   },
   warnText: {
     color: theme.colors.statusConnecting, // the theme's amber
