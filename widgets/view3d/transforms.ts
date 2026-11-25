@@ -127,6 +127,11 @@ export class TfPositionTracker {
     return null;
   }
 
+  /** Whether any received transform mentions this frame. */
+  hasFrame(frame: string): boolean {
+    return this.edges.has(stripSlash(frame));
+  }
+
   /** `fromFrame_T_toFrame` as translation + rotation (e.g. the robot's pose in the fixed frame). */
   lookupPose(fromFrame: string, toFrame: string): { translation: Point3D; rotation: Quaternion } | null {
     return this.lookupTransform(fromFrame, toFrame);

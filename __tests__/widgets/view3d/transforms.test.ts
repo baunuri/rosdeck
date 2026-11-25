@@ -153,3 +153,13 @@ describe('PointCloud2 transforms', () => {
     expect(accumulator.voxelSize).toBe(0.25);
   });
 });
+
+describe('TfPositionTracker.hasFrame', () => {
+  it('knows frames from either end of a transform', () => {
+    const tracker = new TfPositionTracker();
+    expect(tracker.hasFrame('map')).toBe(false);
+    tracker.update({ transforms: [{ header: { frame_id: '/map' }, child_frame_id: 'odom', transform: { translation: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0, w: 1 } } }] });
+    expect(tracker.hasFrame('map')).toBe(true);
+    expect(tracker.hasFrame('odom')).toBe(true);
+  });
+});

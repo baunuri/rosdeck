@@ -40,7 +40,11 @@ const COLORS = {
   path: rgba('#FBBF24'),
   robot: rgba(theme.colors.statusConnected),
   goal: rgba(theme.colors.statusError),
+  poseEstimate: rgba('#22D3EE'),
 };
+// RViz's 2D Pose Estimate covariance: 0.5 m std-dev in x/y, ~15° in yaw.
+const POSE_COVARIANCE = [0.25, 0, 0, 0, 0, 0, 0, 0.25, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.06853891945200942];
+type Tool = 'goal' | 'pose';
 const GOAL_HOLD_MS = 450;
 
 interface GridLayer { pixels: Uint8Array; width: number; height: number; corners: Float32Array; frame: string; opacity: number }
@@ -60,6 +64,8 @@ export function View3DWidget(props: Partial<WidgetProps>) {
   const pathTopic: string = config.pathTopic ?? '/plan';
   const enableGoal = config.enableGoal ?? true;
   const goalTopic: string = config.goalTopic || '/goal_pose';
+  const enablePoseEstimate = config.enablePoseEstimate ?? true;
+  const poseEstimateTopic: string = config.poseEstimateTopic || '/initialpose';
   const accumulate = Boolean(config.accumulate);
   const showGrid = config.showGrid ?? true;
   const startTopDown = Boolean(config.topDown);
@@ -70,6 +76,9 @@ export function View3DWidget(props: Partial<WidgetProps>) {
   const [follow, setFollowState] = useState(true);
   const [topDown, setTopDown] = useState(startTopDown);
   const [placingGoal, setPlacingGoal] = useState(false);
+  const [tool, setToolState] = useState<Tool>(enableGoal ? 'goal' : 'pose');
+  const toolRef = useRef<Tool>(tool);
+  const setTool = useCallback((t: Tool) => { toolRef.current = t; setToolState(t); }, []);
 
   // Scene state lives in refs: data and gestures request a frame; React never re-renders per frame.
   const tracker = useRef(new TfPositionTracker()).current;
@@ -92,13 +101,17 @@ export function View3DWidget(props: Partial<WidgetProps>) {
   const dataVersion = useRef(0); // bumped whenever a layer's data changes
   const lastDrawn = useRef('');
 
-  /** Configured frame if TF connects it to the robot, else odom, else the robot's own frame (like RViz falling back). */
+  /**
+   * The configured frame whenever anything lives in it (TF or a layer such as the map), like
+   * RViz: before AMCL localizes, the map still shows in `map` and you set the initial pose
+   * on it; only the robot is missing. Otherwise odom, else the robot's own frame.
+   */
   const resolveFixedFrame = useCallback(() => {
-    for (const frame of [fixedFrame, 'odom']) {
-      if (tracker.lookupPose(frame, robotFrame)) return frame;
-    }
+    const known = tracker.hasFrame(fixedFrame) || Object.values(grids).some((g) => g?.frame === fixedFrame);
+    if (known) return fixedFrame;
+    if (tracker.lookupPose('odom', robotFrame)) return 'odom';
     return robotFrame;
-  }, [fixedFrame, robotFrame, tracker]);
+  }, [fixedFrame, grids, robotFrame, tracker]);
 
   const renderFrame = useCallback(() => {
     frameRequested.current = false;
@@ -136,7 +149,7 @@ export function View3DWidget(props: Partial<WidgetProps>) {
       delete pending.cloud;
     }
     if (pending.goal !== undefined) {
-      renderer.setShape('goal', pending.goal, { color: COLORS.goal, mode: 'triangles' });
+      renderer.setShape('goal', pending.goal, { color: toolRef.current === 'pose' ? COLORS.poseEstimate : COLORS.goal, mode: 'triangles' });
       delete pending.goal;
     }
     if (pending.path !== undefined) {
@@ -311,10 +324,10 @@ export function View3DWidget(props: Partial<WidgetProps>) {
       setCamera({ ...cameraRef.current, viewMeters: Math.max(1, Math.min(500, gestureStart.current.viewMeters / e.scale)) });
     });
     const view = Gesture.Simultaneous(orbit, pan, pinch);
-    if (!enableGoal) return view;
+    if (!enableGoal && !enablePoseEstimate) return view;
 
-    // RViz "2D Goal Pose": hold to place, drag to aim, release to send. Moving before the
-    // hold time elapses orbits instead (the two race).
+    // RViz "2D Goal Pose" / "2D Pose Estimate": hold to place, drag to aim, release to send.
+    // Moving before the hold time elapses orbits instead (the two race).
     const showGoal = () => {
       const g = goalDraft.current;
       pending.goal = g ? arrow(g.x, g.y, 0.06, g.yaw, 0.8, 0.45) : null;
@@ -343,13 +356,18 @@ export function View3DWidget(props: Partial<WidgetProps>) {
         const g = goalDraft.current;
         if (!g || !transport) return;
         const now = Date.now();
-        transport.publish(goalTopic, 'geometry_msgs/msg/PoseStamped', {
-          header: { stamp: { sec: Math.floor(now / 1000), nanosec: (now % 1000) * 1_000_000 }, frame_id: fixedRef.current },
-          pose: {
-            position: { x: g.x, y: g.y, z: 0 },
-            orientation: { x: 0, y: 0, z: Math.sin(g.yaw / 2), w: Math.cos(g.yaw / 2) },
-          },
-        });
+        const header = { stamp: { sec: Math.floor(now / 1000), nanosec: (now % 1000) * 1_000_000 }, frame_id: fixedRef.current };
+        const pose = {
+          position: { x: g.x, y: g.y, z: 0 },
+          orientation: { x: 0, y: 0, z: Math.sin(g.yaw / 2), w: Math.cos(g.yaw / 2) },
+        };
+        if (toolRef.current === 'pose') {
+          transport.publish(poseEstimateTopic, 'geometry_msgs/msg/PoseWithCovarianceStamped', {
+            header, pose: { pose, covariance: POSE_COVARIANCE },
+          });
+        } else {
+          transport.publish(goalTopic, 'geometry_msgs/msg/PoseStamped', { header, pose });
+        }
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       })
       .onFinalize(() => {
@@ -357,7 +375,7 @@ export function View3DWidget(props: Partial<WidgetProps>) {
         setPlacingGoal(false);
       });
     return Gesture.Race(goal, view);
-  }, [enableGoal, goalTopic, pending, requestDraw, setCamera, setFollow, transport]);
+  }, [enableGoal, enablePoseEstimate, goalTopic, poseEstimateTopic, pending, requestDraw, setCamera, setFollow, transport]);
 
   const toggleTopDown = useCallback(() => {
     const next = !topDown;
@@ -387,7 +405,11 @@ export function View3DWidget(props: Partial<WidgetProps>) {
           {stats.frame || fixedFrame}{stats.fallback ? ` (no TF to ${fixedFrame})` : ''}
         </Text>
         {!stats.robot && <Text style={[styles.statsText, styles.warnText]}>waiting for TF → {robotFrame}</Text>}
-        {placingGoal && <Text style={[styles.statsText, styles.goalText]}>drag to aim · release to send goal</Text>}
+        {placingGoal && (
+          <Text style={[styles.statsText, tool === 'pose' ? styles.poseText : styles.goalText]}>
+            drag to aim · release to {tool === 'pose' ? 'set pose estimate' : 'send goal'}
+          </Text>
+        )}
         {stats.cloudPoints > 0 && <Text style={styles.statsText}>{stats.cloudPoints.toLocaleString()} pts</Text>}
         {stats.cloudBytes > LARGE_CLOUD_BYTES && (
           <Text style={[styles.statsText, styles.warnText]}>
@@ -399,6 +421,13 @@ export function View3DWidget(props: Partial<WidgetProps>) {
       <View style={styles.controls}>
         <ControlButton icon={topDown ? 'cube-outline' : 'map-outline'} label={topDown ? '3D view' : 'Top-down view'} onPress={toggleTopDown} />
         <ControlButton icon="locate-outline" label="Follow robot" onPress={() => setFollow(!follow)} active={follow} />
+        {enableGoal && enablePoseEstimate && (
+          <ControlButton
+            icon={tool === 'goal' ? 'flag-outline' : 'navigate-outline'}
+            label={tool === 'goal' ? 'Tool: Nav goal (tap for pose estimate)' : 'Tool: Pose estimate (tap for nav goal)'}
+            onPress={() => setTool(tool === 'goal' ? 'pose' : 'goal')}
+          />
+        )}
         {accumulate && cloudTopic !== '' && (
           <ControlButton icon="trash-outline" label="Clear points" onPress={clearCloud} destructive />
         )}
@@ -466,6 +495,9 @@ const styles = StyleSheet.create({
   },
   goalText: {
     color: theme.colors.statusError,
+  },
+  poseText: {
+    color: '#22D3EE',
   },
   warnText: {
     color: theme.colors.statusConnecting, // the theme's amber
