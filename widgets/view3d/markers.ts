@@ -31,6 +31,13 @@ export const MARKER = {
   CUBE_LIST: 6, SPHERE_LIST: 7, POINTS: 8, TEXT_VIEW_FACING: 9, MESH_RESOURCE: 10, TRIANGLE_LIST: 11,
 } as const;
 const ADD = 0, DELETE = 2, DELETEALL = 3;
+const SOLIDS = new Set<number>([MARKER.CUBE, MARKER.SPHERE, MARKER.CYLINDER]);
+/**
+ * Above this many solids (cubes/spheres/cylinders, counting cube-list entries) each is drawn
+ * as one point instead of a mesh. Planners publish thousands of sample spheres (e.g. 7.6k
+ * per message at 14 Hz); meshing those is millions of vertices per frame.
+ */
+export const SOLID_BUDGET = 300;
 
 export interface MarkerGeometry { xyz: Float32Array; rgba: Float32Array }
 export interface MarkerBuild { triangles: MarkerGeometry; lines: MarkerGeometry; points: MarkerGeometry }
@@ -123,11 +130,33 @@ export class MarkerStore {
 
   get size() { return this.markers.size; }
 
-  build(toFixed: FrameTransform): MarkerBuild {
+  build(toFixed: FrameTransform, solidBudget = SOLID_BUDGET): MarkerBuild {
+    // Posed geometry is collected per (frame, target) and transformed once per frame: thousands
+    // of markers usually share one frame, and each TF lookup is a graph search.
+    const groups = new Map<string, { frame: string; target: Builder; local: Builder }>();
     const tris = new Builder(), lines = new Builder(), points = new Builder();
+    let solids = 0;
     for (const { msg } of this.markers.values()) {
-      const t = msg.type ?? 0;
+      if (SOLIDS.has(msg.type ?? 0)) solids++;
+      else if (msg.type === MARKER.CUBE_LIST) solids += msg.points?.length ?? 0;
+    }
+    const solidsAsPoints = solids > solidBudget;
+    for (const { msg } of this.markers.values()) {
+      let t = msg.type ?? 0;
       if (t === MARKER.TEXT_VIEW_FACING || t === MARKER.MESH_RESOURCE) continue;
+      if (solidsAsPoints && SOLIDS.has(t)) {
+        // Fast path (thousands of these): one point at the pose, no per-marker builder.
+        const frame = msg.header?.frame_id ?? '';
+        const key = `${frame}|p`;
+        let group = groups.get(key);
+        if (!group) groups.set(key, (group = { frame, target: points, local: new Builder() }));
+        const pos = msg.pose?.position;
+        const c = msg.color;
+        group.local.xyz.push(pos?.x ?? 0, pos?.y ?? 0, pos?.z ?? 0);
+        group.local.rgba.push(c?.r ?? 1, c?.g ?? 1, c?.b ?? 1, c?.a ?? 1);
+        continue;
+      }
+      if (solidsAsPoints && t === MARKER.CUBE_LIST) t = MARKER.POINTS; // one point per entry
       const q = msg.pose?.orientation ?? { x: 0, y: 0, z: 0, w: 1 };
       const p = msg.pose?.position ?? { x: 0, y: 0, z: 0 };
       const s = msg.scale ?? { x: 1, y: 1, z: 1 };
@@ -179,12 +208,20 @@ export class MarkerStore {
         continue;
       }
       if (local.xyz.length === 0) continue;
-      const posed = new Float32Array(local.xyz.length);
+      const frame = msg.header?.frame_id ?? '';
+      const key = `${frame}|${target === tris ? 't' : target === lines ? 'l' : 'p'}`;
+      let group = groups.get(key);
+      if (!group) groups.set(key, (group = { frame, target, local: new Builder() }));
+      const identity = q.x === 0 && q.y === 0 && q.z === 0;
       for (let i = 0; i < local.xyz.length; i += 3) {
-        const r = rotate(q, [local.xyz[i], local.xyz[i + 1], local.xyz[i + 2]]);
-        posed[i] = r[0] + p.x; posed[i + 1] = r[1] + p.y; posed[i + 2] = r[2] + p.z;
+        const v = [local.xyz[i], local.xyz[i + 1], local.xyz[i + 2]];
+        const r = identity ? v : rotate(q, v);
+        group.local.xyz.push(r[0] + p.x, r[1] + p.y, r[2] + p.z);
       }
-      const fixed = toFixed(posed, msg.header?.frame_id ?? '');
+      for (let i = 0; i < local.rgba.length; i++) group.local.rgba.push(local.rgba[i]);
+    }
+    for (const { frame, target, local } of groups.values()) {
+      const fixed = toFixed(Float32Array.from(local.xyz), frame);
       if (!fixed) continue;
       for (let i = 0; i < fixed.length; i++) target.xyz.push(fixed[i]);
       for (let i = 0; i < local.rgba.length; i++) target.rgba.push(local.rgba[i]);

@@ -63,3 +63,18 @@ describe('MarkerStore', () => {
     expect(Array.from(points.xyz).map((v) => +v.toFixed(5) + 0)).toEqual([0, 1, 0]);
   });
 });
+
+describe('MarkerStore level of detail', () => {
+  it('draws solids as single points once there are more than the budget', () => {
+    const store = new MarkerStore();
+    for (let i = 0; i < 5; i++) {
+      store.apply({ id: i, type: MARKER.SPHERE, pose: { position: { x: i, y: 0, z: 0 }, orientation: { x: 0, y: 0, z: 0, w: 1 } } });
+    }
+    const meshed = store.build((xyz) => xyz, 10);
+    expect(meshed.triangles.xyz.length).toBeGreaterThan(0);
+    expect(meshed.points.xyz.length).toBe(0);
+    const asPoints = store.build((xyz) => xyz, 4);
+    expect(asPoints.triangles.xyz.length).toBe(0);
+    expect(Array.from(asPoints.points.xyz).filter((_, i) => i % 3 === 0)).toEqual([0, 1, 2, 3, 4]);
+  });
+});

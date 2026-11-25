@@ -50,6 +50,11 @@ type Tool = 'goal' | 'pose';
 const GOAL_HOLD_MS = 450;
 const TF_AXIS_LENGTH = 0.3;
 const SLOW_LAYER_MS = 100; // TF axes and markers in moving frames re-placed at most 10x/s
+// ponytail: MarkerArrays decoded at most 2x/s (skipped ones are never decoded). Fine when each
+// array is the full current set (planners' sample spheres: 7.6k markers, 1.9 MB, 14 Hz);
+// incremental publishers would lose updates. Single Marker topics are never throttled.
+const MARKER_ARRAY_INTERVAL_MS = 500;
+const MARKER_TF_REFRESH_MS = 500; // re-place unchanged markers this often to follow TF
 
 interface GridLayer { pixels: Uint8Array; width: number; height: number; corners: Float32Array; frame: string; opacity: number }
 
@@ -97,7 +102,7 @@ export function View3DWidget(props: Partial<WidgetProps>) {
   const accumulators = useRef(new Map<string, AdaptiveVoxelAccumulator>()).current;
   const cloudStats = useRef(new Map<string, { points: number; bytes: number }>()).current;
   const markers = useRef(new MarkerStore()).current;
-  const slowLayers = useRef({ at: 0, markerVersion: -1 });
+  const slowLayers = useRef({ at: 0, markerVersion: -1, markerAt: 0 });
   const cloudTopicsRef = useRef(cloudTopics);
   cloudTopicsRef.current = cloudTopics;
   const rendererRef = useRef<SceneRenderer | null>(null);
@@ -178,11 +183,13 @@ export function View3DWidget(props: Partial<WidgetProps>) {
     // TF axes and markers depend on TF that changes every message: re-place them at most 10x/s.
     const now = Date.now();
     markers.prune(now);
-    if (now - slowLayers.current.at > SLOW_LAYER_MS || markers.version !== slowLayers.current.markerVersion) {
+    if (now - slowLayers.current.at > SLOW_LAYER_MS) {
       const markersChanged = markers.version !== slowLayers.current.markerVersion;
-      slowLayers.current = { at: now, markerVersion: markers.version };
+      slowLayers.current = { ...slowLayers.current, at: now, markerVersion: markers.version };
       let rebuilt = false;
-      if (markers.size > 0 || markersChanged) {
+      const markerTfDue = markers.size > 0 && now - slowLayers.current.markerAt > MARKER_TF_REFRESH_MS;
+      if (markersChanged || markerTfDue) {
+        slowLayers.current.markerAt = now;
         rebuilt = true;
         const built = markers.build((xyz, frame) => tracker.transformFlat(xyz, frame, fixed));
         renderer.setColored('markerTriangles', built.triangles.xyz, built.triangles.rgba, 'triangles');
@@ -371,7 +378,7 @@ export function View3DWidget(props: Partial<WidgetProps>) {
     sub(markerArrayTopic, 'visualization_msgs/msg/MarkerArray', (m) => {
       for (const marker of m?.markers ?? []) markers.apply(marker);
       requestDraw();
-    });
+    }, MARKER_ARRAY_INTERVAL_MS);
     sub(markerTopic, 'visualization_msgs/msg/Marker', (m) => {
       markers.apply(m);
       requestDraw();
