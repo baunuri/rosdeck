@@ -36,6 +36,8 @@ export interface WidgetConfigField {
   label: string;
   type: 'topic' | 'text' | 'number' | 'boolean' | 'select' | 'series-editor' | 'axis-mapping' | 'slider';
   topicMessageTypes?: string[];
+  /** Heading shown above the first field of each run of fields with the same section. */
+  section?: string;
   /** 'topic' fields: allow several topics, stored comma-separated. */
   multiple?: boolean;
   options?: Array<{ label: string; value: string }>;

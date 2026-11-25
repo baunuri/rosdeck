@@ -83,7 +83,7 @@ export function LayoutEditor({
           activeOpacity={0.8}
           onPress={() => { Haptics.selectionAsync(); setMenuVisible(true); }}
         >
-          <View style={isLandscape ? styles.overlayContentRotated : undefined}>
+          <View style={[styles.overlayContent, isLandscape && styles.overlayContentRotated]}>
             <Text style={styles.overlayName}>{widgetDef?.name?.toUpperCase() || 'WIDGET'}</Text>
             <Text style={styles.overlayHint}>TAP TO EDIT</Text>
           </View>
@@ -210,6 +210,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: theme.colors.textPrimary,
   },
+  overlayContent: { alignItems: 'center' },
   overlayHint: {
     fontFamily: 'SpaceMono',
     fontSize: 9,

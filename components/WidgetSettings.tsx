@@ -376,7 +376,14 @@ export function WidgetSettings({ visible, widgetName, configSchema, config, onCo
           </View>
           <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
             <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer} keyboardShouldPersistTaps="handled">
-              {configSchema.map(renderField)}
+              {configSchema.map((field, i) => (
+                <React.Fragment key={field.key}>
+                  {field.section && field.section !== configSchema[i - 1]?.section && (
+                    <Text style={[styles.sectionTitle, i === 0 && styles.sectionTitleFirst]}>{field.section}</Text>
+                  )}
+                  {renderField(field)}
+                </React.Fragment>
+              ))}
             </ScrollView>
           </TouchableWithoutFeedback>
         </View>
@@ -428,6 +435,16 @@ const styles = StyleSheet.create({
   field: {
     marginBottom: 16,
   },
+  sectionTitle: {
+    ...theme.typography.label,
+    color: theme.colors.accentPrimary,
+    marginTop: 20,
+    marginBottom: 12,
+    paddingBottom: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.borderSubtle,
+  },
+  sectionTitleFirst: { marginTop: 0 },
   fieldLabel: {
     fontSize: 12,
     color: theme.colors.textSecondary,
