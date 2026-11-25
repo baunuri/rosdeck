@@ -9,13 +9,19 @@ import type { ExpoWebGLRenderingContext } from 'expo-gl';
 
 export type Rgba = [number, number, number, number];
 export type TextureLayer = 'map' | 'globalCostmap' | 'localCostmap';
-export type ShapeLayer = 'grid' | 'path' | 'robot' | 'goal';
-export type PointLayer = 'scan' | 'cloud';
-type LayerName = TextureLayer | ShapeLayer | PointLayer;
+export type ShapeLayer = 'grid' | 'path' | 'footprint' | 'robot' | 'goal';
+/** 'cloud:<topic>' allows any number of point clouds. */
+export type PointLayer = 'scan' | `cloud:${string}`;
+/** Per-vertex coloured geometry (TF axes, markers). */
+export type ColoredLayer = 'tf' | 'markerTriangles' | 'markerLines' | 'markerPoints';
+type LayerName = TextureLayer | ShapeLayer | PointLayer | ColoredLayer;
 
-const DRAW_ORDER: LayerName[] = [
-  'grid', 'map', 'globalCostmap', 'localCostmap', 'path', 'scan', 'cloud', 'robot', 'goal',
+// Back to front; a layer named 'base:detail' sorts with 'base'.
+const DRAW_ORDER = [
+  'grid', 'map', 'globalCostmap', 'localCostmap', 'path', 'footprint',
+  'markerTriangles', 'markerLines', 'markerPoints', 'scan', 'cloud', 'tf', 'robot', 'goal',
 ];
+const orderOf = (name: string) => DRAW_ORDER.indexOf(name.split(':')[0]);
 
 const POINTS_VS = `
 attribute vec3 aPos;
@@ -57,6 +63,19 @@ precision mediump float;
 uniform vec4 uColor;
 void main() { gl_FragColor = uColor; }`;
 
+const COLORED_VS = `
+attribute vec3 aPos;
+attribute vec4 aColor;
+uniform mat4 uMVP;
+uniform float uSize;
+varying vec4 vColor;
+void main() { gl_Position = uMVP * vec4(aPos, 1.0); gl_PointSize = uSize; vColor = aColor; }`;
+
+const COLORED_FS = `
+precision mediump float;
+varying vec4 vColor;
+void main() { gl_FragColor = vColor; }`;
+
 const TEX_VS = `
 attribute vec3 aPos;
 attribute vec2 aUV;
@@ -75,7 +94,7 @@ void main() { vec4 t = texture2D(uTex, vUV); gl_FragColor = vec4(t.rgb, t.a * uO
 const QUAD_UV = new Float32Array([0, 1, 1, 1, 0, 0, 1, 0]);
 
 interface PointStyle { color: Rgba; size: number; heightColored?: boolean; zMin?: number; zMax?: number }
-interface ShapeStyle { color: Rgba; mode: 'lines' | 'strip' | 'triangles' }
+interface ShapeStyle { color: Rgba; mode: 'lines' | 'strip' | 'triangles' | 'loop' }
 export interface GridImage {
   rgba: Uint8Array;
   width: number;
@@ -85,7 +104,9 @@ export interface GridImage {
   opacity: number;
 }
 
+type Mode = 'lines' | 'strip' | 'loop' | 'triangles' | 'points';
 type Layer =
+  | { kind: 'colored'; buffer: WebGLBuffer; colorBuffer: WebGLBuffer; count: number; mode: Mode; size: number }
   | { kind: 'points'; buffer: WebGLBuffer; count: number; style: PointStyle }
   | { kind: 'shape'; buffer: WebGLBuffer; count: number; style: ShapeStyle }
   | { kind: 'texture'; buffer: WebGLBuffer; texture: WebGLTexture; opacity: number };
@@ -93,6 +114,10 @@ type Layer =
 export interface SceneRenderer {
   setPoints(name: PointLayer, xyz: Float32Array | null, style?: PointStyle): void;
   setShape(name: ShapeLayer, xyz: Float32Array | null, style?: ShapeStyle): void;
+  /** `rgba` holds 4 floats (0-1) per vertex. `size` is the point size for mode 'points'. */
+  setColored(name: ColoredLayer, xyz: Float32Array | null, rgba?: Float32Array, mode?: Mode, size?: number): void;
+  /** Point-cloud layer names currently present (to drop clouds whose topic was removed). */
+  pointLayers(): string[];
   setTexture(name: TextureLayer, image: GridImage | null): void;
   /** Re-places an existing texture layer (TF moved) without re-uploading its pixels. */
   moveTexture(name: TextureLayer, corners: Float32Array): void;
@@ -127,6 +152,8 @@ export function createSceneRenderer(gl: ExpoWebGLRenderingContext): SceneRendere
   const points = program(gl, POINTS_VS, POINTS_FS);
   const flat = program(gl, FLAT_VS, FLAT_FS);
   const tex = program(gl, TEX_VS, TEX_FS);
+  const colored = program(gl, COLORED_VS, COLORED_FS);
+  const aColor = gl.getAttribLocation(colored.p, 'aColor');
   const uvBuffer = gl.createBuffer()!;
   gl.bindBuffer(gl.ARRAY_BUFFER, uvBuffer);
   gl.bufferData(gl.ARRAY_BUFFER, QUAD_UV, gl.STATIC_DRAW);
@@ -143,6 +170,7 @@ export function createSceneRenderer(gl: ExpoWebGLRenderingContext): SceneRendere
     if (!layer) return;
     gl.deleteBuffer(layer.buffer);
     if (layer.kind === 'texture') gl.deleteTexture(layer.texture);
+    if (layer.kind === 'colored') gl.deleteBuffer(layer.colorBuffer);
     layers.delete(name);
   };
 
@@ -159,6 +187,18 @@ export function createSceneRenderer(gl: ExpoWebGLRenderingContext): SceneRendere
       const prev = layers.get(name);
       const buffer = upload(prev?.buffer, xyz);
       layers.set(name, { kind: 'shape', buffer, count: Math.floor(xyz.length / 3), style });
+    },
+
+    setColored(name, xyz, rgba, mode = 'lines', size = 1) {
+      if (!xyz || xyz.length === 0 || !rgba) return drop(name);
+      const prev = layers.get(name);
+      const buffer = upload(prev?.buffer, xyz);
+      const colorBuffer = upload(prev?.kind === 'colored' ? prev.colorBuffer : undefined, rgba);
+      layers.set(name, { kind: 'colored', buffer, colorBuffer, count: Math.floor(xyz.length / 3), mode, size });
+    },
+
+    pointLayers() {
+      return [...layers.keys()].filter((name) => name.startsWith('cloud:'));
     },
 
     setTexture(name, image) {
@@ -191,14 +231,27 @@ export function createSceneRenderer(gl: ExpoWebGLRenderingContext): SceneRendere
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
       // Camera matrix set once per program per frame (each GL call is a native round trip).
-      for (const prog of [points, flat, tex]) {
+      for (const prog of [points, flat, tex, colored]) {
         gl.useProgram(prog.p);
         gl.uniformMatrix4fv(prog.u('uMVP'), false, mvp);
       }
-      for (const name of DRAW_ORDER) {
-        const layer = layers.get(name);
-        if (!layer) continue;
-        if (layer.kind === 'texture') {
+      const ordered = [...layers.keys()].sort((a, b) => orderOf(a) - orderOf(b));
+      for (const name of ordered) {
+        const layer = layers.get(name)!;
+        const glMode = (mode: Mode) => mode === 'lines' ? gl.LINES : mode === 'strip' ? gl.LINE_STRIP
+          : mode === 'loop' ? gl.LINE_LOOP : mode === 'points' ? gl.POINTS : gl.TRIANGLES;
+        if (layer.kind === 'colored') {
+          gl.useProgram(colored.p);
+          gl.uniform1f(colored.u('uSize'), layer.size);
+          gl.bindBuffer(gl.ARRAY_BUFFER, layer.buffer);
+          gl.enableVertexAttribArray(colored.aPos);
+          gl.vertexAttribPointer(colored.aPos, 3, gl.FLOAT, false, 0, 0);
+          gl.bindBuffer(gl.ARRAY_BUFFER, layer.colorBuffer);
+          gl.enableVertexAttribArray(aColor);
+          gl.vertexAttribPointer(aColor, 4, gl.FLOAT, false, 0, 0);
+          gl.drawArrays(glMode(layer.mode), 0, layer.count);
+          gl.disableVertexAttribArray(aColor);
+        } else if (layer.kind === 'texture') {
           gl.useProgram(tex.p);
           gl.uniform1f(tex.u('uOpacity'), layer.opacity);
           gl.activeTexture(gl.TEXTURE0);
@@ -229,9 +282,7 @@ export function createSceneRenderer(gl: ExpoWebGLRenderingContext): SceneRendere
           gl.bindBuffer(gl.ARRAY_BUFFER, layer.buffer);
           gl.enableVertexAttribArray(flat.aPos);
           gl.vertexAttribPointer(flat.aPos, 3, gl.FLOAT, false, 0, 0);
-          const mode = layer.style.mode === 'lines' ? gl.LINES
-            : layer.style.mode === 'strip' ? gl.LINE_STRIP : gl.TRIANGLES;
-          gl.drawArrays(mode, 0, layer.count);
+          gl.drawArrays(glMode(layer.style.mode), 0, layer.count);
         }
       }
       gl.flush();

@@ -127,6 +127,11 @@ export class TfPositionTracker {
     return null;
   }
 
+  /** Every frame any received transform mentions. */
+  frames(): string[] {
+    return [...this.edges.keys()];
+  }
+
   /** Whether any received transform mentions this frame. */
   hasFrame(frame: string): boolean {
     return this.edges.has(stripSlash(frame));

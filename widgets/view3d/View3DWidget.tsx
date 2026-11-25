@@ -12,6 +12,7 @@ import type { WidgetProps } from '../../types/layout';
 import { COSTMAP_LUT, gridToRgbaFast, OCCUPANCY_LUT } from '../map/transforms';
 import { unprojectGround, viewProjection, type Camera } from './camera';
 import { arrow, gridCorners, gridLines, laserScanToXyz, pathToXyz, yawOf } from './geometry';
+import { MarkerStore } from './markers';
 import { createSceneRenderer, type Rgba, type SceneRenderer, type TextureLayer } from './renderer';
 import {
   AdaptiveVoxelAccumulator,
@@ -39,6 +40,7 @@ const COLORS = {
   scan: rgba(theme.colors.accentPrimary),
   path: rgba('#FBBF24'),
   robot: rgba(theme.colors.statusConnected),
+  footprint: rgba(theme.colors.statusConnected, 0.9),
   goal: rgba(theme.colors.statusError),
   poseEstimate: rgba('#22D3EE'),
 };
@@ -46,6 +48,8 @@ const COLORS = {
 const POSE_COVARIANCE = [0.25, 0, 0, 0, 0, 0, 0, 0.25, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.06853891945200942];
 type Tool = 'goal' | 'pose';
 const GOAL_HOLD_MS = 450;
+const TF_AXIS_LENGTH = 0.3;
+const SLOW_LAYER_MS = 100; // TF axes and markers in moving frames re-placed at most 10x/s
 
 interface GridLayer { pixels: Uint8Array; width: number; height: number; corners: Float32Array; frame: string; opacity: number }
 
@@ -60,7 +64,13 @@ export function View3DWidget(props: Partial<WidgetProps>) {
   const localCostmapTopic: string = config.localCostmapTopic ?? '/local_costmap/costmap';
   const costmapOpacity = Number(config.costmapOpacity ?? 0.5);
   const scanTopic: string = config.scanTopic ?? '/scan';
-  const cloudTopic: string = config.cloudTopic ?? '';
+  // Several clouds: comma-separated topics, one layer each.
+  const cloudTopicList: string = String(config.cloudTopic ?? '');
+  const cloudTopics = useMemo(() => cloudTopicList.split(',').map((t) => t.trim()).filter(Boolean), [cloudTopicList]);
+  const footprintTopic: string = config.footprintTopic ?? '/local_costmap/published_footprint';
+  const markerArrayTopic: string = config.markerArrayTopic ?? '';
+  const markerTopic: string = config.markerTopic ?? '';
+  const showTf = Boolean(config.showTf);
   const pathTopic: string = config.pathTopic ?? '/plan';
   const enableGoal = config.enableGoal ?? true;
   const goalTopic: string = config.goalTopic || '/goal_pose';
@@ -82,11 +92,19 @@ export function View3DWidget(props: Partial<WidgetProps>) {
 
   // Scene state lives in refs: data and gestures request a frame; React never re-renders per frame.
   const tracker = useRef(new TfPositionTracker()).current;
-  const accumulator = useRef(new AdaptiveVoxelAccumulator(0.12, 60000)).current;
+  const accumulators = useRef(new Map<string, AdaptiveVoxelAccumulator>()).current;
+  const cloudStats = useRef(new Map<string, { points: number; bytes: number }>()).current;
+  const markers = useRef(new MarkerStore()).current;
+  const slowLayers = useRef({ at: 0, markerVersion: -1 });
+  const cloudTopicsRef = useRef(cloudTopics);
+  cloudTopicsRef.current = cloudTopics;
   const rendererRef = useRef<SceneRenderer | null>(null);
   const grids = useRef<Partial<Record<TextureLayer, GridLayer>>>({}).current;
   const dirtyGrids = useRef(new Set<TextureLayer>()).current;
-  const pending = useRef<{ scan?: Float32Array | null; cloud?: { xyz: Float32Array; zMin: number; zMax: number } | null; path?: Float32Array | null; goal?: Float32Array | null }>({}).current;
+  const pending = useRef<{
+    scan?: Float32Array | null; path?: Float32Array | null; goal?: Float32Array | null; footprint?: Float32Array | null;
+    clouds: Map<string, { xyz: Float32Array; zMin: number; zMax: number } | null>;
+  }>({ clouds: new Map() }).current;
   const goalDraft = useRef<{ x: number; y: number; yaw: number } | null>(null);
   const fixedRef = useRef(fixedFrame);
   const followRef = useRef(true);
@@ -143,10 +161,58 @@ export function View3DWidget(props: Partial<WidgetProps>) {
       renderer.setPoints('scan', pending.scan, { color: COLORS.scan, size: 3 * PX });
       delete pending.scan;
     }
-    if (pending.cloud !== undefined) {
-      const cloud = pending.cloud;
-      renderer.setPoints('cloud', cloud?.xyz ?? null, cloud ? { color: COLORS.scan, size: 2 * PX, heightColored: true, zMin: cloud.zMin, zMax: cloud.zMax } : undefined);
-      delete pending.cloud;
+    for (const [topic, cloud] of pending.clouds) {
+      renderer.setPoints(`cloud:${topic}`, cloud?.xyz ?? null, cloud ? { color: COLORS.scan, size: 2 * PX, heightColored: true, zMin: cloud.zMin, zMax: cloud.zMax } : undefined);
+    }
+    pending.clouds.clear();
+    for (const name of renderer.pointLayers()) {
+      if (!cloudTopicsRef.current.includes(name.slice('cloud:'.length))) renderer.setPoints(name as `cloud:${string}`, null);
+    }
+    if (pending.footprint !== undefined) {
+      renderer.setShape('footprint', pending.footprint, { color: COLORS.footprint, mode: 'loop' });
+      delete pending.footprint;
+    }
+
+    // TF axes and markers depend on TF that changes every message: re-place them at most 10x/s.
+    const now = Date.now();
+    markers.prune(now);
+    if (now - slowLayers.current.at > SLOW_LAYER_MS || markers.version !== slowLayers.current.markerVersion) {
+      const markersChanged = markers.version !== slowLayers.current.markerVersion;
+      slowLayers.current = { at: now, markerVersion: markers.version };
+      let rebuilt = false;
+      if (markers.size > 0 || markersChanged) {
+        rebuilt = true;
+        const built = markers.build((xyz, frame) => tracker.transformFlat(xyz, frame, fixed));
+        renderer.setColored('markerTriangles', built.triangles.xyz, built.triangles.rgba, 'triangles');
+        renderer.setColored('markerLines', built.lines.xyz, built.lines.rgba, 'lines');
+        renderer.setColored('markerPoints', built.points.xyz, built.points.rgba, 'points', 4 * PX);
+      }
+      if (showTf) {
+        const xyz: number[] = [];
+        const colors: number[] = [];
+        for (const frame of tracker.frames()) {
+          const p = tracker.lookupPose(fixed, frame);
+          if (!p) continue;
+          const { x, y, z } = p.translation;
+          const q = p.rotation;
+          // Columns of the frame's rotation matrix = its x/y/z axes in the fixed frame.
+          const axes = [
+            [1 - 2 * (q.y * q.y + q.z * q.z), 2 * (q.x * q.y + q.z * q.w), 2 * (q.x * q.z - q.y * q.w)],
+            [2 * (q.x * q.y - q.z * q.w), 1 - 2 * (q.x * q.x + q.z * q.z), 2 * (q.y * q.z + q.x * q.w)],
+            [2 * (q.x * q.z + q.y * q.w), 2 * (q.y * q.z - q.x * q.w), 1 - 2 * (q.x * q.x + q.y * q.y)],
+          ];
+          axes.forEach((a, i) => {
+            xyz.push(x, y, z, x + a[0] * TF_AXIS_LENGTH, y + a[1] * TF_AXIS_LENGTH, z + a[2] * TF_AXIS_LENGTH);
+            const c = [i === 0 ? 1 : 0, i === 1 ? 1 : 0, i === 2 ? 1 : 0, 1];
+            colors.push(...c, ...c);
+          });
+        }
+        renderer.setColored('tf', Float32Array.from(xyz), Float32Array.from(colors), 'lines');
+        rebuilt = true;
+      } else {
+        renderer.setColored('tf', null);
+      }
+      if (rebuilt) dataVersion.current++;
     }
     if (pending.goal !== undefined) {
       renderer.setShape('goal', pending.goal, { color: toolRef.current === 'pose' ? COLORS.poseEstimate : COLORS.goal, mode: 'triangles' });
@@ -177,7 +243,7 @@ export function View3DWidget(props: Partial<WidgetProps>) {
       lastStats.current = key;
       setStats((s) => ({ ...s, ...next }));
     }
-  }, [dirtyGrids, fixedFrame, grids, pending, resolveFixedFrame, robotFrame, tracker]);
+  }, [dirtyGrids, fixedFrame, grids, markers, pending, resolveFixedFrame, robotFrame, showTf, tracker]);
 
   const requestDraw = useCallback(() => {
     if (frameRequested.current) return;
@@ -209,15 +275,16 @@ export function View3DWidget(props: Partial<WidgetProps>) {
   }, [requestDraw]);
 
   const clearCloud = useCallback(() => {
-    accumulator.clear();
-    pending.cloud = null;
+    accumulators.clear();
+    cloudStats.clear();
+    for (const topic of cloudTopicsRef.current) pending.clouds.set(topic, null);
     dataVersion.current++;
     setStats((s) => ({ ...s, cloudPoints: 0, cloudBytes: 0 }));
     requestDraw();
-  }, [accumulator, pending, requestDraw]);
+  }, [accumulators, cloudStats, pending, requestDraw]);
 
   // Accumulated points live in the old fixed frame; never mix frames.
-  useEffect(() => clearCloud(), [cloudTopic, fixedFrame, accumulate, clearCloud]);
+  useEffect(() => clearCloud(), [cloudTopicList, fixedFrame, accumulate, clearCloud]);
 
   useEffect(() => {
     if (connectionStatus !== 'connected' || !transport) return;
@@ -258,7 +325,7 @@ export function View3DWidget(props: Partial<WidgetProps>) {
       requestDraw();
     }, SCAN_INTERVAL_MS);
 
-    sub(cloudTopic, 'sensor_msgs/msg/PointCloud2', (m) => {
+    for (const topic of cloudTopics) sub(topic, 'sensor_msgs/msg/PointCloud2', (m) => {
       const source = String(m.header?.frame_id || '');
       const fixed = fixedRef.current;
       let xyz: Float32Array | null;
@@ -267,9 +334,11 @@ export function View3DWidget(props: Partial<WidgetProps>) {
         // Voxel map stays object-based; it is bounded and only touched at CLOUD_INTERVAL_MS.
         const inFixed = tracker.transformPointCloud(parsePointCloud2(m, MAX_CLOUD_POINTS), source, fixed);
         if (!inFixed || inFixed.length === 0) return; // never mix frames in the map
-        accumulator.add(inFixed);
-        xyz = Float32Array.from(accumulator.snapshot(MAX_CLOUD_POINTS).flatMap((p) => [p.x, p.y, p.z]));
-        count = accumulator.pointCount;
+        let acc = accumulators.get(topic);
+        if (!acc) accumulators.set(topic, (acc = new AdaptiveVoxelAccumulator(0.12, 60000)));
+        acc.add(inFixed);
+        xyz = Float32Array.from(acc.snapshot(MAX_CLOUD_POINTS).flatMap((p) => [p.x, p.y, p.z]));
+        count = acc.pointCount;
       } else {
         xyz = tracker.transformFlat(parsePointCloud2Flat(m, MAX_CLOUD_POINTS), source, fixed);
         if (!xyz) return;
@@ -277,11 +346,34 @@ export function View3DWidget(props: Partial<WidgetProps>) {
       }
       let zMin = Infinity, zMax = -Infinity;
       for (let i = 2; i < xyz.length; i += 3) { if (xyz[i] < zMin) zMin = xyz[i]; if (xyz[i] > zMax) zMax = xyz[i]; }
-      pending.cloud = { xyz, zMin, zMax };
+      pending.clouds.set(topic, { xyz, zMin, zMax });
+      cloudStats.set(topic, { points: count, bytes: m?.data?.length ?? 0 });
       dataVersion.current++;
-      setStats((s) => ({ ...s, cloudPoints: count, cloudBytes: m?.data?.length ?? 0 }));
+      const all = [...cloudStats.values()];
+      setStats((s) => ({
+        ...s,
+        cloudPoints: all.reduce((n, c) => n + c.points, 0),
+        cloudBytes: Math.max(...all.map((c) => c.bytes)),
+      }));
       requestDraw();
     }, CLOUD_INTERVAL_MS);
+
+    sub(footprintTopic, 'geometry_msgs/msg/PolygonStamped', (m) => {
+      const pts: Array<{ x: number; y: number; z: number }> = m?.polygon?.points ?? [];
+      const local = Float32Array.from(pts.flatMap((p) => [p.x, p.y, (p.z ?? 0) + 0.03]));
+      pending.footprint = tracker.transformFlat(local, String(m.header?.frame_id || ''), fixedRef.current);
+      dataVersion.current++;
+      requestDraw();
+    }, 200);
+
+    sub(markerArrayTopic, 'visualization_msgs/msg/MarkerArray', (m) => {
+      for (const marker of m?.markers ?? []) markers.apply(marker);
+      requestDraw();
+    });
+    sub(markerTopic, 'visualization_msgs/msg/Marker', (m) => {
+      markers.apply(m);
+      requestDraw();
+    });
 
     sub(pathTopic, 'nav_msgs/msg/Path', (m) => {
       pending.path = tracker.transformFlat(pathToXyz(m), String(m.header?.frame_id || 'map'), fixedRef.current);
@@ -292,7 +384,8 @@ export function View3DWidget(props: Partial<WidgetProps>) {
     return () => subs.forEach((s) => s.unsubscribe());
   }, [
     connectionStatus, transport, mapTopic, globalCostmapTopic, localCostmapTopic, costmapOpacity,
-    scanTopic, cloudTopic, pathTopic, accumulate, tracker, accumulator, grids, dirtyGrids, pending, requestDraw,
+    scanTopic, cloudTopics, pathTopic, footprintTopic, markerArrayTopic, markerTopic, accumulate,
+    tracker, accumulators, cloudStats, markers, grids, dirtyGrids, pending, requestDraw,
   ]);
 
   // RViz-style controls: one finger orbits, two fingers pan (stops following), pinch zooms.
@@ -428,7 +521,7 @@ export function View3DWidget(props: Partial<WidgetProps>) {
             onPress={() => setTool(tool === 'goal' ? 'pose' : 'goal')}
           />
         )}
-        {accumulate && cloudTopic !== '' && (
+        {accumulate && cloudTopics.length > 0 && (
           <ControlButton icon="trash-outline" label="Clear points" onPress={clearCloud} destructive />
         )}
       </View>
