@@ -127,6 +127,11 @@ export class TfPositionTracker {
     return null;
   }
 
+  /** `fromFrame_T_toFrame` as translation + rotation (e.g. the robot's pose in the fixed frame). */
+  lookupPose(fromFrame: string, toFrame: string): { translation: Point3D; rotation: Quaternion } | null {
+    return this.lookupTransform(fromFrame, toFrame);
+  }
+
   lookupPosition(fromFrame: string, toFrame: string): Point3D | null {
     return this.lookupTransform(fromFrame, toFrame)?.translation ?? null;
   }

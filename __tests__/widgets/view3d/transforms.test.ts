@@ -4,7 +4,7 @@ import {
   parsePointCloud2Flat,
   TfPositionTracker,
   type PointCloudPoint,
-} from '../../../widgets/pointcloud3d/transforms';
+} from '../../../widgets/view3d/transforms';
 
 function makeCloud(points: Array<[number, number, number, number]>) {
   const pointStep = 48;
