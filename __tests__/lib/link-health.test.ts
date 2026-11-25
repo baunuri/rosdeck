@@ -6,9 +6,9 @@ describe('linkReport', () => {
   const sample = {
     minOffsetMs: 5000,
     topics: [
-      { topic: '/tf', offsetMs: 5020, bytes: 20_000, seenAt: now },
-      { topic: '/cloud', offsetMs: 7500, bytes: 9_000_000, seenAt: now },
-      { topic: '/gone', offsetMs: 9000, bytes: 0, seenAt: now - 10_000 },
+      { topic: '/tf', offsetMs: 5020, bytes: 20_000, seenAt: now, subscribedAt: now - 60_000 },
+      { topic: '/cloud', offsetMs: 7500, bytes: 9_000_000, seenAt: now, subscribedAt: now - 60_000 },
+      { topic: '/gone', offsetMs: 9000, bytes: 0, seenAt: now - 10_000, subscribedAt: now - 60_000 },
     ],
   };
 
@@ -20,6 +20,15 @@ describe('linkReport', () => {
   });
 
   it('reports nothing behind when every topic is current', () => {
-    expect(linkReport({ minOffsetMs: 0, topics: [{ topic: '/tf', offsetMs: 30, bytes: 1, seenAt: now }] }, now, 1000).behind).toEqual([]);
+    expect(linkReport({ minOffsetMs: 0, topics: [{ topic: '/tf', offsetMs: 30, bytes: 1, seenAt: now, subscribedAt: now - 1000 }] }, now, 1000).behind).toEqual([]);
+  });
+
+  it('ignores latched messages: published before we subscribed, so not time spent queued', () => {
+    // A map latched 100 s ago, delivered 200 ms after subscribing (e.g. after a bulk reconnect).
+    const r = linkReport({ minOffsetMs: 0, topics: [
+      { topic: '/map', offsetMs: 100_000, bytes: 4_000_000, seenAt: now, subscribedAt: now - 200 },
+    ] }, now, 1000);
+    expect(r.lagMs).toBe(0);
+    expect(r.behind).toEqual([]);
   });
 });

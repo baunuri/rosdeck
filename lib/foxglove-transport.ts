@@ -3,7 +3,7 @@ import { MessageReader } from '@foxglove/rosmsg2-serialization';
 import { parse as parseMessageDefinition } from '@foxglove/rosmsg';
 import { createBinaryWebSocket } from './binary-websocket';
 import { isJazzyMarkerSchema, parseMarkerArrayFast } from './marker-cdr';
-import type { LinkSample } from './link-health';
+import { linkReport, type LinkSample } from './link-health';
 
 /**
  * A topic whose messages take T ms to decode is delivered at most once per DECODE_BACKOFF×T ms,
@@ -21,6 +21,7 @@ export class FoxgloveTransport implements Transport {
   // and bytes received since the last takeLinkSample().
   private arrivals = new Map<string, { offsetMs: number; bytes: number; seenAt: number }>();
   private minOffsetMs = Infinity;
+  private subscribedAt = new Map<string, number>();
   private subscriptions: Map<number, {
     topic: string; messageType: string; callback: (msg: any) => void;
     throttleMs: number; lastDelivered: number;
@@ -47,14 +48,18 @@ export class FoxgloveTransport implements Transport {
 
   /** Worst queueing delay among topics heard in the last few seconds, above `baseline` (ms). */
   lagAbove(baseline: number, now = Date.now()) {
-    let worst = 0;
-    for (const a of this.arrivals.values()) if (now - a.seenAt < 5000) worst = Math.max(worst, a.offsetMs - baseline);
-    return worst;
+    return linkReport({ minOffsetMs: baseline, topics: this.linkTopics() }, now, 1000).lagMs;
+  }
+
+  private linkTopics() {
+    return [...this.arrivals].map(([topic, a]) => ({
+      topic, offsetMs: a.offsetMs, bytes: a.bytes, seenAt: a.seenAt, subscribedAt: this.subscribedAt.get(topic) ?? 0,
+    }));
   }
 
   /** Arrival stats since the previous call (byte counters reset). One caller: the lag banner. */
   takeLinkSample(): LinkSample {
-    const topics = [...this.arrivals].map(([topic, a]) => ({ topic, offsetMs: a.offsetMs, bytes: a.bytes, seenAt: a.seenAt }));
+    const topics = this.linkTopics();
     for (const a of this.arrivals.values()) a.bytes = 0;
     return { minOffsetMs: this.minOffsetMs, topics };
   }
@@ -347,6 +352,7 @@ export class FoxgloveTransport implements Transport {
     this.topicBridgeSub.clear();
     this.bridgeSubToTopic.clear();
     this.arrivals.clear();
+    this.subscribedAt.clear();
     this.minOffsetMs = Infinity;
     this.setStatus('disconnected');
   }
@@ -357,6 +363,7 @@ export class FoxgloveTransport implements Transport {
 
     if (!this.topicBridgeSub.has(topic)) {
       // First subscriber for this topic — create the bridge-level subscription.
+      this.subscribedAt.set(topic, Date.now());
       this.topicBridgeSub.set(topic, subId);
       this.bridgeSubToTopic.set(subId, topic);
       const channelId = this.topicToChannelId.get(topic);
