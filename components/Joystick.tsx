@@ -66,7 +66,7 @@ export function Joystick(props?: Partial<WidgetProps>) {
   const yAxisField = `${yAxisGroup}.${yAxisComponent}` as TwistField;
 
   const setAxes = useCmdVelStore((s) => s.setAxes);
-  const { publishNow } = useCmdVelPublisher(cmdVelTopic, useTwistStamped, frameId);
+  const { publishNow } = useCmdVelPublisher(cmdVelTopic, useTwistStamped, frameId, !props?.config?.silentWhenCentered);
 
   const gamepadConnected = useGamepadStore((s) => s.connected);
   const nodeId = props?.nodeId;
