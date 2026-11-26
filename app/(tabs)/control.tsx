@@ -236,8 +236,6 @@ export default function ControlScreen() {
         </TouchableOpacity>
       )}
 
-      {status === "connected" && <LinkHealthBanner />}
-
       {status !== "connected" ? (
         <View style={styles.disconnected}>
           <Ionicons
@@ -251,7 +249,10 @@ export default function ControlScreen() {
           </Text>
         </View>
       ) : (
-        <LayoutRenderer />
+        <View style={{ flex: 1 }}>
+          <LayoutRenderer />
+          <LinkHealthBanner />
+        </View>
       )}
 
       <TopicSuggestionModal
