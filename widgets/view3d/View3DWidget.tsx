@@ -26,8 +26,6 @@ const MAX_CLOUD_POINTS = 50000;
 // ponytail: one cloud per 250 ms; accumulate mode skips scans between. Lower it for denser maps.
 const CLOUD_INTERVAL_MS = 250;
 const SCAN_INTERVAL_MS = 100;
-// Above this, the bytes alone bog down the JS thread (see lib/binary-websocket.ts).
-const LARGE_CLOUD_BYTES = 512 * 1024;
 const TILTED_PITCH = 0.75;
 const PX = PixelRatio.get();
 
@@ -89,7 +87,7 @@ export function View3DWidget(props: Partial<WidgetProps>) {
   const width = Math.max(1, props?.width || 300);
   const height = Math.max(1, props?.height || 300);
 
-  const [stats, setStats] = useState({ frame: '', fallback: false, robot: false, cloudPoints: 0, cloudBytes: 0 });
+  const [stats, setStats] = useState({ frame: '', fallback: false, robot: false, cloudPoints: 0 });
   const [follow, setFollowState] = useState(true);
   const [topDown, setTopDown] = useState(startTopDown);
   const [placingGoal, setPlacingGoal] = useState(false);
@@ -100,7 +98,7 @@ export function View3DWidget(props: Partial<WidgetProps>) {
   // Scene state lives in refs: data and gestures request a frame; React never re-renders per frame.
   const tracker = useRef(new TfPositionTracker()).current;
   const accumulators = useRef(new Map<string, AdaptiveVoxelAccumulator>()).current;
-  const cloudStats = useRef(new Map<string, { points: number; bytes: number }>()).current;
+  const cloudStats = useRef(new Map<string, number>()).current;
   const markers = useRef(new MarkerStore()).current;
   const slowLayers = useRef({ at: 0, markerVersion: -1, markerAt: 0 });
   const cloudTopicsRef = useRef(cloudTopics);
@@ -288,7 +286,7 @@ export function View3DWidget(props: Partial<WidgetProps>) {
     cloudStats.clear();
     for (const topic of cloudTopicsRef.current) pending.clouds.set(topic, null);
     dataVersion.current++;
-    setStats((s) => ({ ...s, cloudPoints: 0, cloudBytes: 0 }));
+    setStats((s) => ({ ...s, cloudPoints: 0 }));
     requestDraw();
   }, [accumulators, cloudStats, pending, requestDraw]);
 
@@ -356,14 +354,9 @@ export function View3DWidget(props: Partial<WidgetProps>) {
       let zMin = Infinity, zMax = -Infinity;
       for (let i = 2; i < xyz.length; i += 3) { if (xyz[i] < zMin) zMin = xyz[i]; if (xyz[i] > zMax) zMax = xyz[i]; }
       pending.clouds.set(topic, { xyz, zMin, zMax });
-      cloudStats.set(topic, { points: count, bytes: m?.data?.length ?? 0 });
+      cloudStats.set(topic, count);
       dataVersion.current++;
-      const all = [...cloudStats.values()];
-      setStats((s) => ({
-        ...s,
-        cloudPoints: all.reduce((n, c) => n + c.points, 0),
-        cloudBytes: Math.max(...all.map((c) => c.bytes)),
-      }));
+      setStats((s) => ({ ...s, cloudPoints: [...cloudStats.values()].reduce((n, c) => n + c, 0) }));
       requestDraw();
     }, CLOUD_INTERVAL_MS);
 
@@ -519,11 +512,6 @@ export function View3DWidget(props: Partial<WidgetProps>) {
           </Text>
         )}
         {stats.cloudPoints > 0 && <Text style={styles.statsText}>{stats.cloudPoints.toLocaleString()} pts</Text>}
-        {stats.cloudBytes > LARGE_CLOUD_BYTES && (
-          <Text style={[styles.statsText, styles.warnText]}>
-            {(stats.cloudBytes / 1048576).toFixed(1)} MB/msg: downsample on the robot (VoxelGrid)
-          </Text>
-        )}
       </View>
 
       <View style={styles.controls}>
