@@ -88,7 +88,7 @@ export function SplitDivider({ nodeId, direction }: Props) {
         </AnimatedTouchable>
       )}
 
-      <Modal visible={modalVisible} transparent animationType="fade">
+      <Modal visible={modalVisible} transparent animationType="fade" statusBarTranslucent navigationBarTranslucent>
         <TouchableOpacity
           style={styles.modalOverlay}
           activeOpacity={1}

@@ -11,7 +11,7 @@ interface Props {
 
 export function SetupGuide({ visible, onClose, onTryDemo }: Props) {
   return (
-    <Modal visible={visible} transparent animationType="fade">
+    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent navigationBarTranslucent>
       <View style={styles.overlay}>
         <View style={styles.container}>
           <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>

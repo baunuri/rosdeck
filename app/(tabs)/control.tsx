@@ -69,7 +69,7 @@ function ConnectionDot() {
         />
       </TouchableOpacity>
 
-      <Modal visible={popupVisible} transparent animationType="fade">
+      <Modal visible={popupVisible} transparent animationType="fade" statusBarTranslucent navigationBarTranslucent>
         <TouchableOpacity
           style={styles.popupOverlay}
           activeOpacity={1}

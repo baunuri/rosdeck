@@ -121,7 +121,7 @@ export function LayoutManager() {
       </TouchableOpacity>
 
       {/* ── Layout list modal ── */}
-      <Modal visible={listVisible} transparent animationType="fade">
+      <Modal visible={listVisible} transparent animationType="fade" statusBarTranslucent navigationBarTranslucent>
         <TouchableOpacity
           style={styles.modalOverlay}
           activeOpacity={1}
@@ -265,7 +265,7 @@ export function LayoutManager() {
       </Modal>
 
       {/* ── Presets modal ── */}
-      <Modal visible={presetsVisible} transparent animationType="fade">
+      <Modal visible={presetsVisible} transparent animationType="fade" statusBarTranslucent navigationBarTranslucent>
         <TouchableOpacity
           style={styles.modalOverlay}
           activeOpacity={1}
@@ -306,7 +306,7 @@ export function LayoutManager() {
       </Modal>
 
       {/* ── Save as preset dialog ── */}
-      <Modal visible={savePresetFor !== null} transparent animationType="fade">
+      <Modal visible={savePresetFor !== null} transparent animationType="fade" statusBarTranslucent navigationBarTranslucent>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setSavePresetFor(null)}>
           <View style={[styles.modalContent, { maxHeight: undefined }]}>
             <View style={styles.modalHeader}>

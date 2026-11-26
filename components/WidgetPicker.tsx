@@ -18,7 +18,7 @@ export function WidgetPicker({ visible, onSelect, onClose }: Props) {
   const { isLandscape } = useOrientation();
 
   return (
-    <Modal visible={visible} transparent animationType="fade">
+    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent navigationBarTranslucent>
       <View style={[styles.overlay, isLandscape && styles.overlayLandscape]}>
         <View style={[styles.container, isLandscape && styles.containerLandscape]}>
           <View style={styles.header}>

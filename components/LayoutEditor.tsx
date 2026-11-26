@@ -91,7 +91,7 @@ export function LayoutEditor({
       </Animated.View>
 
       {/* Action menu */}
-      <Modal visible={menuVisible} transparent animationType="fade">
+      <Modal visible={menuVisible} transparent animationType="fade" statusBarTranslucent navigationBarTranslucent>
         <TouchableOpacity
           style={styles.modalOverlay}
           activeOpacity={1}

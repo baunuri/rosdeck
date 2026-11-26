@@ -365,7 +365,7 @@ export function WidgetSettings({ visible, widgetName, configSchema, config, onCo
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
+    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent navigationBarTranslucent onRequestClose={handleClose}>
       <View style={[styles.overlay, isLandscape && styles.overlayLandscape]}>
         <View style={[styles.container, isLandscape && styles.containerLandscape]}>
           <View style={styles.header}>
