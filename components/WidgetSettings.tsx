@@ -376,8 +376,9 @@ export function WidgetSettings({ visible, widgetName, configSchema, config, onCo
           </View>
           <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
             <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer} keyboardShouldPersistTaps="handled">
+              {/* Key by index too: a key can appear twice with different visibleWhen (camera topic per source). */}
               {configSchema.map((field, i) => (
-                <React.Fragment key={field.key}>
+                <React.Fragment key={`${i}:${field.key}`}>
                   {field.section && field.section !== configSchema[i - 1]?.section && (
                     <Text style={[styles.sectionTitle, i === 0 && styles.sectionTitleFirst]}>{field.section}</Text>
                   )}
