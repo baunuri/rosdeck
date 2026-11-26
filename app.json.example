@@ -50,7 +50,9 @@
           }
         }
       ],
-      "./plugins/withSwiftConcurrencyFix"
+      "./plugins/withSwiftConcurrencyFix",
+      "./modules/expo-gamepad/plugin/withGamepadActivity",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true
