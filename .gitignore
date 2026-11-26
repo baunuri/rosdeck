@@ -64,3 +64,5 @@ assets/images/icon-candidates
 
 *.apk
 *.aab
+# private local notes for Claude Code
+CLAUDE.local.md
