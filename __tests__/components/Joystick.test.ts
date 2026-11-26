@@ -19,40 +19,36 @@ jest.mock('react-native-reanimated', () => ({
 
 import { calculateVelocity } from '../../components/Joystick';
 
+// calculateVelocity returns the stick deflection normalised to [-1, 1]: ny forward (+) / back,
+// nx left (+) / right (ROS: +angular.z turns left). Scaling to m/s and rad/s happens in the widget.
 describe('calculateVelocity', () => {
-  const maxLinear = 1.0;
-  const maxAngular = 2.0;
   const radius = 60;
 
-  it('returns zero velocity at center', () => {
-    const { linearX, angularZ } = calculateVelocity(0, 0, radius, maxLinear, maxAngular);
-    expect(linearX).toBe(0);
-    expect(angularZ).toBe(0);
+  it('is zero at center', () => {
+    expect(calculateVelocity(0, 0, radius)).toEqual({ nx: 0, ny: 0 });
   });
 
-  it('returns max linear velocity when pushed fully forward', () => {
-    const { linearX, angularZ } = calculateVelocity(0, -radius, radius, maxLinear, maxAngular);
-    expect(linearX).toBeCloseTo(maxLinear);
-    expect(angularZ).toBeCloseTo(0);
+  it('is +1 forward when pushed fully up', () => {
+    const { nx, ny } = calculateVelocity(0, -radius, radius);
+    expect(ny).toBeCloseTo(1);
+    expect(nx).toBeCloseTo(0);
   });
 
-  it('returns negative linear velocity when pulled fully back', () => {
-    const { linearX } = calculateVelocity(0, radius, radius, maxLinear, maxAngular);
-    expect(linearX).toBeCloseTo(-maxLinear);
+  it('is -1 forward when pulled fully back', () => {
+    expect(calculateVelocity(0, radius, radius).ny).toBeCloseTo(-1);
   });
 
-  it('returns positive angular velocity when pushed fully left', () => {
-    const { angularZ } = calculateVelocity(-radius, 0, radius, maxLinear, maxAngular);
-    expect(angularZ).toBeCloseTo(maxAngular);
+  it('is +1 sideways when pushed fully left', () => {
+    expect(calculateVelocity(-radius, 0, radius).nx).toBeCloseTo(1);
   });
 
-  it('returns negative angular velocity when pushed fully right', () => {
-    const { angularZ } = calculateVelocity(radius, 0, radius, maxLinear, maxAngular);
-    expect(angularZ).toBeCloseTo(-maxAngular);
+  it('is -1 sideways when pushed fully right', () => {
+    expect(calculateVelocity(radius, 0, radius).nx).toBeCloseTo(-1);
   });
 
-  it('clamps to max values when pushed beyond radius', () => {
-    const { linearX } = calculateVelocity(0, -radius * 2, radius, maxLinear, maxAngular);
-    expect(linearX).toBe(maxLinear);
+  it('clamps to the unit circle when pushed beyond the radius', () => {
+    expect(calculateVelocity(0, -radius * 2, radius).ny).toBeCloseTo(1);
+    const { nx, ny } = calculateVelocity(radius * 2, -radius * 2, radius);
+    expect(Math.hypot(nx, ny)).toBeCloseTo(1);
   });
 });

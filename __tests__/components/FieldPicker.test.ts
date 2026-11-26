@@ -57,18 +57,19 @@ describe('extractNumericPaths', () => {
     expect(paths).toContain('interface_values.0.values.15');
   });
 
-  it('caps array sampling at 16 elements', () => {
-    const values = Array.from({ length: 20 }, (_, i) => i);
+  it('caps array sampling at 32 elements', () => {
+    const values = Array.from({ length: 40 }, (_, i) => i);
     const msg = { data: values };
     const paths = extractNumericPaths(msg);
-    expect(paths).toContain('data.15');
-    expect(paths).not.toContain('data.16');
+    expect(paths).toContain('data.31');
+    expect(paths).not.toContain('data.32');
   });
 
-  it('respects depth limit of 6', () => {
-    const msg = { a: { b: { c: { d: { e: { f: { g: 1 } } } } } } };
+  it('respects depth limit of 8', () => {
+    const msg = { a: { b: { c: { d: { e: { f: { g: { h: 1, i: { j: 1 } } } } } } } } };
     const paths = extractNumericPaths(msg);
-    expect(paths).not.toContain('a.b.c.d.e.f.g');
+    expect(paths).toContain('a.b.c.d.e.f.g.h');
+    expect(paths).not.toContain('a.b.c.d.e.f.g.i.j');
   });
 
   it('returns empty array for null/undefined', () => {

@@ -18,7 +18,7 @@ describe('buildTwistMessage', () => {
 
 describe('buildTwistStampedMessage', () => {
   it('wraps Twist in stamped header with frame_id', () => {
-    const msg = buildTwistStampedMessage(0.5, 0.3, 'base_link');
+    const msg = buildTwistStampedMessage(buildTwistMessage(0.5, 0.3), 'base_link');
     expect(msg.header.frame_id).toBe('base_link');
     expect(msg.header.stamp.sec).toBeGreaterThan(0);
     expect(msg.twist.linear.x).toBe(0.5);
