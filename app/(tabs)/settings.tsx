@@ -6,6 +6,8 @@ import {
   Switch,
   TouchableOpacity,
   Alert,
+  Linking,
+  Platform,
   StyleSheet,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,8 +20,10 @@ import { useLayoutStore } from '../../stores/useLayoutStore';
 import { usePresetsStore } from '../../stores/usePresetsStore';
 import { useOnboardingStore } from '../../stores/useOnboardingStore';
 import { SetupGuide } from '../../components/SetupGuide';
+import { SupportSection } from '../../components/SupportSection';
 import { useOrientation } from '../../hooks/useOrientation';
 import { theme } from '../../constants/theme';
+import { RELEASES_URL, WHATS_NEW } from '../../constants/whatsNew';
 
 const PUBLISH_RATE_OPTIONS = [5, 10, 20, 30];
 const DEPTH_OPTIONS = [4, 6, 8, 12];
@@ -48,6 +52,7 @@ export default function SettingsScreen() {
 
   const robotUrl = useLayoutStore((s) => s.robotUrl);
   const [showGuide, setShowGuide] = React.useState(false);
+  const [showWhatsNew, setShowWhatsNew] = React.useState(false);
 
   const handleResetLayouts = () => {
     if (!robotUrl) return;
@@ -363,6 +368,8 @@ export default function SettingsScreen() {
         </TouchableOpacity>
       </View>
 
+      {Platform.OS === 'android' && <SupportSection />}
+
       <Text style={styles.sectionTitle}>ABOUT</Text>
       <View style={styles.card}>
         <View style={styles.infoRow}>
@@ -375,6 +382,23 @@ export default function SettingsScreen() {
             </Text>
           </Text>
         </View>
+        <TouchableOpacity style={styles.actionRow} onPress={() => setShowWhatsNew((v) => !v)}>
+          <Ionicons name="sparkles-outline" size={16} color={theme.colors.accentPrimary} />
+          <Text style={[styles.actionText, { flex: 1 }]}>What's new in {WHATS_NEW.version}</Text>
+          <Ionicons name={showWhatsNew ? 'chevron-up' : 'chevron-down'} size={16} color={theme.colors.textMuted} />
+        </TouchableOpacity>
+        {showWhatsNew && (
+          <View style={styles.notes}>
+            {WHATS_NEW.notes.map((n) => (
+              <Text key={n} style={styles.note}>•  {n}</Text>
+            ))}
+          </View>
+        )}
+        <TouchableOpacity style={styles.actionRow} onPress={() => Linking.openURL(RELEASES_URL).catch(() => {})}>
+          <Ionicons name="logo-github" size={16} color={theme.colors.accentPrimary} />
+          <Text style={[styles.actionText, { flex: 1 }]}>All release notes</Text>
+          <Ionicons name="open-outline" size={14} color={theme.colors.textMuted} />
+        </TouchableOpacity>
         <TouchableOpacity style={styles.actionRow} onPress={() => setShowGuide(true)}>
           <Ionicons name="book-outline" size={16} color={theme.colors.accentPrimary} />
           <Text style={styles.actionText}>Setup Guide</Text>
@@ -529,6 +553,8 @@ const styles = StyleSheet.create({
     color: theme.colors.textPrimary,
     fontWeight: '500',
   },
+  notes: { gap: 6, paddingLeft: 26, paddingBottom: 6 },
+  note: { fontSize: 13, color: theme.colors.textSecondary, lineHeight: 18 },
   buildNumber: {
     fontSize: 12,
     color: theme.colors.textMuted,

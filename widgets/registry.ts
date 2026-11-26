@@ -11,6 +11,8 @@ import { diagnosticsWidget } from './diagnostics';
 import { rosoutWidget } from './rosout';
 import { batteryWidget } from './battery';
 import { chartWidget } from './chart';
+import { view3dWidget } from './view3d';
+import { gpsMapWidget } from './gps-map';
 
 export const WIDGET_REGISTRY: Record<string, WidgetDefinition> = {
   joystick: joystickWidget,
@@ -24,6 +26,8 @@ export const WIDGET_REGISTRY: Record<string, WidgetDefinition> = {
   rosout: rosoutWidget,
   battery: batteryWidget,
   chart: chartWidget,
+  view3d: view3dWidget,
+  'gps-map': gpsMapWidget,
 };
 
 export function getWidget(type: string): WidgetDefinition | undefined {

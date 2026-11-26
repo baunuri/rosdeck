@@ -33,7 +33,7 @@ export const PRESET_TEMPLATES: PresetTemplate[] = [
     name: 'Nav',
     buildTree: () =>
       createSplitNode('vertical',
-        createWidgetNode('map', { topic: '/map', enableNav2Goal: false, nav2GoalTopic: '/goal_pose' }),
+        createWidgetNode('map', { mapTopic: '/map', topDown: true, enableGoal: false }),
         createWidgetNode('joystick', { topic: DEFAULTS.cmdVelTopic, maxLinearVel: DEFAULTS.maxLinearVel, maxAngularVel: DEFAULTS.maxAngularVel, useTwistStamped: true, frameId: 'base_link' }),
         0.6
       ),
@@ -44,7 +44,7 @@ export const PRESET_TEMPLATES: PresetTemplate[] = [
     buildTree: () =>
       createSplitNode('horizontal',
         createSplitNode('vertical',
-          createWidgetNode('map', { topic: '/map', scanTopic: '/scan', odomTopic: '/odom', enableNav2Goal: false, nav2GoalTopic: '/goal_pose' }),
+          createWidgetNode('map', { mapTopic: '/map', scanTopic: '/scan', topDown: true, enableGoal: false }),
           createSplitNode('vertical',
             createWidgetNode('battery', { topic: '/battery_state' }),
             createWidgetNode('diagnostics', { topic: '/diagnostics' }),

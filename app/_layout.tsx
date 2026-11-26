@@ -5,7 +5,7 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
-import { AppState, type AppStateStatus } from 'react-native';
+import { AppState, Platform, type AppStateStatus } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 import {
@@ -21,6 +21,8 @@ import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 
 import { useRosStore } from '../stores/useRosStore';
 import { useOnboardingStore } from '../stores/useOnboardingStore';
+import { useSupporterStore } from '../stores/useSupporterStore';
+import { syncSupporterFromPlay } from '../components/SupportSection';
 import { useSettingsStore } from '../stores/useSettingsStore';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 
@@ -64,6 +66,9 @@ function RootLayoutNav() {
     useRosStore.getState().loadSavedConnections();
     useOnboardingStore.getState().loadOnboarding();
     useSettingsStore.getState().load();
+    useSupporterStore.getState().load().then(() => {
+      if (Platform.OS === 'android') syncSupporterFromPlay();
+    });
 
     const handleAppState = (nextState: AppStateStatus) => {
       const store = useRosStore.getState();

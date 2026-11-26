@@ -14,7 +14,7 @@ interface Props {
 
 export function ConfirmDialog({ visible, title, message, confirmLabel = 'DELETE', confirmColor = theme.colors.statusError, onConfirm, onCancel }: Props) {
   return (
-    <Modal visible={visible} transparent animationType="fade">
+    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent navigationBarTranslucent>
       <View style={styles.overlay}>
         <View style={styles.container}>
           <Text style={styles.title}>{title}</Text>

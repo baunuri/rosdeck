@@ -22,7 +22,7 @@ export function TopicSuggestionModal({ visible, suggestion, onAccept, onDismiss 
   const presetName = PRESET_TEMPLATES.find((p) => p.id === suggestion.presetId)?.name ?? suggestion.presetId;
 
   return (
-    <Modal visible={visible} transparent animationType="fade">
+    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent navigationBarTranslucent>
       <View style={styles.overlay}>
         <View style={styles.container}>
           <Text style={styles.title}>DETECTED TOPICS</Text>

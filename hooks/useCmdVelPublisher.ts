@@ -36,6 +36,11 @@ useSettingsStore.subscribe((state) => {
   }
 });
 
+/** Skip only repeat zeros, and only when idle publishing is off: the first zero after motion always goes out. */
+export function shouldPublish(zero: boolean, zeroAlreadySent: boolean, publishWhenIdle: boolean, force = false): boolean {
+  return force || publishWhenIdle || !zero || !zeroAlreadySent;
+}
+
 function buildTwistFromAxes(axes: Record<string, number>): TwistMessage {
   const twist: TwistMessage = { linear: { x: 0, y: 0, z: 0 }, angular: { x: 0, y: 0, z: 0 } };
   for (const [field, value] of Object.entries(axes) as [TwistField, number][]) {
@@ -51,6 +56,8 @@ export function useCmdVelPublisher(
   topic: string,
   useTwistStamped: boolean,
   frameId: string,
+  /** false: stay silent while centered; the first zero after motion is still sent (joystick or gamepad). */
+  publishWhenIdle = true,
 ): { publishNow: () => void } {
   const ros = useRosStore((s) => s.connection.ros);
   const transport = useRosStore((s) => s.transport);
@@ -83,9 +90,12 @@ export function useCmdVelPublisher(
   }, [ros, status, topic, useTwistStamped]);
 
   // publishRef is updated every render so the interval always calls fresh logic.
-  const publishRef = useRef<() => void>(() => {});
-  publishRef.current = () => {
+  const publishRef = useRef<(force?: boolean) => void>(() => {});
+  const sentZeroRef = useRef(false);
+  publishRef.current = (force = false) => {
     const axes = useCmdVelStore.getState().topics[topic] ?? {};
+    const zero = Object.values(axes).every((v) => !v);
+    if (!shouldPublish(zero, sentZeroRef.current, publishWhenIdle, force)) return;
     const twist = buildTwistFromAxes(axes);
     const msg = useTwistStamped ? buildTwistStampedMessage(twist, frameId) : twist;
     const messageType = useTwistStamped
@@ -96,8 +106,10 @@ export function useCmdVelPublisher(
     // current config — guards the render→effect race window.
     if (roslibTopicRef.current && roslibTopicTypeRef.current === messageType) {
       roslibTopicRef.current.publish(msg);
+      sentZeroRef.current = zero;
     } else if (transport && status === 'connected') {
       transport.publish(topic, messageType, msg);
+      sentZeroRef.current = zero;
     }
   };
 
@@ -135,5 +147,5 @@ export function useCmdVelPublisher(
     };
   }, [topic]);
 
-  return { publishNow: () => publishRef.current() };
+  return { publishNow: () => publishRef.current(true) };
 }

@@ -13,7 +13,7 @@ export interface TopicSuggestion {
 }
 
 const TYPE_TO_WIDGET: Array<{ pattern: RegExp; widgetType: string; configKey: string }> = [
-  { pattern: /OccupancyGrid/, widgetType: 'map', configKey: 'topic' },
+  { pattern: /OccupancyGrid/, widgetType: 'map', configKey: 'mapTopic' },
   { pattern: /DiagnosticArray/, widgetType: 'diagnostics', configKey: 'topic' },
   { pattern: /BatteryState/, widgetType: 'battery', configKey: 'topic' },
 ];

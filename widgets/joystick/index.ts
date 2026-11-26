@@ -19,11 +19,13 @@ export const joystickWidget: WidgetDefinition = {
     yAxisComponent: 'x',
     yAxisScale: 0.5,
     gamepadStick: 'auto',
+    silentWhenCentered: false,
   },
   configSchema: [
     { key: 'topic', label: 'cmd_vel Topic', type: 'text' },
     { key: 'useTwistStamped', label: 'Use TwistStamped (Jazzy+)', type: 'boolean' },
     { key: 'frameId', label: 'Frame ID', type: 'text' },
+    { key: 'silentWhenCentered', label: 'Stop sending when centered', type: 'boolean' },
     { key: 'axisMapping', label: 'Axis Mapping', type: 'axis-mapping' },
     { key: 'gamepadStick', label: 'Gamepad Stick', type: 'select',
       options: [

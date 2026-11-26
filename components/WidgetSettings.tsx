@@ -277,6 +277,7 @@ export function WidgetSettings({ visible, widgetName, configSchema, config, onCo
             <TopicPicker
               value={draft[field.key] || ''}
               filterMessageTypes={field.topicMessageTypes}
+              multiple={field.multiple}
               onSelect={(topic) => updateDraft(field.key, topic)}
             />
           </View>
@@ -364,7 +365,7 @@ export function WidgetSettings({ visible, widgetName, configSchema, config, onCo
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
+    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent navigationBarTranslucent onRequestClose={handleClose}>
       <View style={[styles.overlay, isLandscape && styles.overlayLandscape]}>
         <View style={[styles.container, isLandscape && styles.containerLandscape]}>
           <View style={styles.header}>
@@ -375,7 +376,15 @@ export function WidgetSettings({ visible, widgetName, configSchema, config, onCo
           </View>
           <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
             <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer} keyboardShouldPersistTaps="handled">
-              {configSchema.map(renderField)}
+              {/* Key by index too: a key can appear twice with different visibleWhen (camera topic per source). */}
+              {configSchema.map((field, i) => (
+                <React.Fragment key={`${i}:${field.key}`}>
+                  {field.section && field.section !== configSchema[i - 1]?.section && (
+                    <Text style={[styles.sectionTitle, i === 0 && styles.sectionTitleFirst]}>{field.section}</Text>
+                  )}
+                  {renderField(field)}
+                </React.Fragment>
+              ))}
             </ScrollView>
           </TouchableWithoutFeedback>
         </View>
@@ -427,6 +436,16 @@ const styles = StyleSheet.create({
   field: {
     marginBottom: 16,
   },
+  sectionTitle: {
+    ...theme.typography.label,
+    color: theme.colors.accentPrimary,
+    marginTop: 20,
+    marginBottom: 12,
+    paddingBottom: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.borderSubtle,
+  },
+  sectionTitleFirst: { marginTop: 0 },
   fieldLabel: {
     fontSize: 12,
     color: theme.colors.textSecondary,

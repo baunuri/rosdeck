@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { LinkHealthBanner } from "../../components/LinkHealthBanner";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
@@ -68,7 +69,7 @@ function ConnectionDot() {
         />
       </TouchableOpacity>
 
-      <Modal visible={popupVisible} transparent animationType="fade">
+      <Modal visible={popupVisible} transparent animationType="fade" statusBarTranslucent navigationBarTranslucent>
         <TouchableOpacity
           style={styles.popupOverlay}
           activeOpacity={1}
@@ -248,7 +249,10 @@ export default function ControlScreen() {
           </Text>
         </View>
       ) : (
-        <LayoutRenderer />
+        <View style={{ flex: 1 }}>
+          <LayoutRenderer />
+          <LinkHealthBanner />
+        </View>
       )}
 
       <TopicSuggestionModal

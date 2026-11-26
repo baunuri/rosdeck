@@ -34,6 +34,7 @@ interface LayoutState {
   updateWidgetConfig: (nodeId: string, config: Record<string, any>) => void;
   swapWidget: (nodeId: string, widgetType: string) => void;
   swapChildren: (splitNodeId: string) => void;
+  rotateSplit: (splitNodeId: string) => void;
   updateSplitRatio: (nodeId: string, ratio: number) => void;
   persist: () => Promise<void>;
   reset: () => void;
@@ -170,6 +171,19 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
       return node;
     };
     get().updateLayoutTree(swap(layout.tree));
+  },
+
+  rotateSplit: (splitNodeId: string) => {
+    const layout = get().getActiveLayout();
+    if (!layout) return;
+    const rotate = (node: LayoutNode): LayoutNode => {
+      if (node.type !== 'split') return node;
+      if (node.id === splitNodeId) {
+        return { ...node, direction: node.direction === 'horizontal' ? 'vertical' : 'horizontal' };
+      }
+      return { ...node, children: [rotate(node.children[0]), rotate(node.children[1])] };
+    };
+    get().updateLayoutTree(rotate(layout.tree));
   },
 
   updateSplitRatio: (nodeId: string, ratio: number) => {

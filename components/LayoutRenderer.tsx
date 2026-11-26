@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Text } from 'react-native';
 import type { LayoutNode } from '../types/layout';
 import { getWidget } from '../widgets/registry';
 import { useLayoutStore } from '../stores/useLayoutStore';
@@ -55,28 +55,43 @@ interface RenderNodeProps {
   parentDirection?: 'horizontal' | 'vertical';
 }
 
+function UnknownWidget({ widgetType }: { widgetType?: string }) {
+  return (
+    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.bgSurface, padding: 12 }}>
+      <Text style={{ color: theme.colors.textMuted, fontSize: 12, textAlign: 'center' }}>
+        Unknown widget "{widgetType}". Edit the layout to change or remove it.
+      </Text>
+    </View>
+  );
+}
+
 function RenderNode({ node, width, height, parentSplitId, parentDirection }: RenderNodeProps) {
   const editMode = useLayoutStore((s) => s.editMode);
   const { isLandscape } = useOrientation();
 
   if (node.type === 'widget') {
     const widgetDef = getWidget(node.widgetType);
-    if (!widgetDef) return <View style={{ width, height, backgroundColor: theme.colors.bgSurface }} />;
-    const Widget = widgetDef.component;
+    // Saved layouts can reference a widget type that no longer exists (renamed/removed):
+    // show a placeholder but keep the edit overlay so the pane can be changed or removed.
+    const Widget = widgetDef?.component;
     const contentWidth = isLandscape ? height : width;
     const contentHeight = isLandscape ? width : height;
     return (
       <View style={{ width, height, position: 'relative' }}>
         <WidgetContentWrapper width={width} height={height}>
-          <Widget
-            nodeId={node.id}
-            config={node.config}
-            onConfigChange={(newConfig) => {
-              useLayoutStore.getState().updateWidgetConfig(node.id, newConfig);
-            }}
-            width={contentWidth}
-            height={contentHeight}
-          />
+          {Widget ? (
+            <Widget
+              nodeId={node.id}
+              config={node.config}
+              onConfigChange={(newConfig) => {
+                useLayoutStore.getState().updateWidgetConfig(node.id, newConfig);
+              }}
+              width={contentWidth}
+              height={contentHeight}
+            />
+          ) : (
+            <UnknownWidget widgetType={node.widgetType} />
+          )}
         </WidgetContentWrapper>
         {editMode && (
           <LayoutEditor

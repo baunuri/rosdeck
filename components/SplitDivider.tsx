@@ -22,6 +22,7 @@ const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
 export function SplitDivider({ nodeId, direction }: Props) {
   const updateSplitRatio = useLayoutStore((s) => s.updateSplitRatio);
   const swapChildren = useLayoutStore((s) => s.swapChildren);
+  const rotateSplit = useLayoutStore((s) => s.rotateSplit);
   const editMode = useLayoutStore((s) => s.editMode);
   const { isLandscape } = useOrientation();
   const [modalVisible, setModalVisible] = useState(false);
@@ -87,7 +88,7 @@ export function SplitDivider({ nodeId, direction }: Props) {
         </AnimatedTouchable>
       )}
 
-      <Modal visible={modalVisible} transparent animationType="fade">
+      <Modal visible={modalVisible} transparent animationType="fade" statusBarTranslucent navigationBarTranslucent>
         <TouchableOpacity
           style={styles.modalOverlay}
           activeOpacity={1}
@@ -138,7 +139,7 @@ export function SplitDivider({ nodeId, direction }: Props) {
               const [first, second] = getChildNames();
               return (
                 <TouchableOpacity
-                  style={[styles.menuItem, styles.menuItemLast]}
+                  style={styles.menuItem}
                   onPress={() => {
                     swapChildren(nodeId);
                     setModalVisible(false);
@@ -155,6 +156,20 @@ export function SplitDivider({ nodeId, direction }: Props) {
                 </TouchableOpacity>
               );
             })()}
+
+            {/* Rotate: side-by-side <-> stacked */}
+            <TouchableOpacity
+              style={[styles.menuItem, styles.menuItemLast]}
+              onPress={() => {
+                rotateSplit(nodeId);
+                setModalVisible(false);
+              }}
+            >
+              <Ionicons name="sync-outline" size={18} color={theme.colors.accentPrimary} />
+              <Text style={styles.swapText}>
+                {(isVertical !== isLandscape) ? "Place side by side" : "Stack on top of each other"}
+              </Text>
+            </TouchableOpacity>
           </View>
         </TouchableOpacity>
       </Modal>

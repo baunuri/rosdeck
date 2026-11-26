@@ -14,13 +14,15 @@ import { type TwistField } from "../lib/ros";
 import { useCmdVelPublisher } from "../hooks/useCmdVelPublisher";
 import { useCmdVelStore } from "../stores/useCmdVelStore";
 import { useGamepadStore } from '../stores/useGamepadStore';
+import { GOLD, useSupporterStore } from "../stores/useSupporterStore";
+import { useSettingsStore } from "../stores/useSettingsStore";
 import type { WidgetProps } from "../types/layout";
 import { registerTouchEntry, unregisterTouchEntry, updateTouchBounds } from "../lib/touch-dispatcher";
 
 const lightTick = () => {
   if (Platform.OS === "ios") {
     Haptics.selectionAsync();
-  } else {
+  } else if (useSettingsStore.getState().hapticsEnabled) {
     Vibration.vibrate(10);
   }
 };
@@ -65,7 +67,7 @@ export function Joystick(props?: Partial<WidgetProps>) {
   const yAxisField = `${yAxisGroup}.${yAxisComponent}` as TwistField;
 
   const setAxes = useCmdVelStore((s) => s.setAxes);
-  const { publishNow } = useCmdVelPublisher(cmdVelTopic, useTwistStamped, frameId);
+  const { publishNow } = useCmdVelPublisher(cmdVelTopic, useTwistStamped, frameId, !props?.config?.silentWhenCentered);
 
   const gamepadConnected = useGamepadStore((s) => s.connected);
   const nodeId = props?.nodeId;
@@ -223,6 +225,9 @@ export function Joystick(props?: Partial<WidgetProps>) {
   }, [scaledRadius]);
 
   const halfRadius = scaledRadius * 0.5;
+  const supporter = useSupporterStore((s) => s.supporter); // tip easter egg: gold knob
+  const accent = supporter ? GOLD : theme.colors.accentPrimary;
+  const knobBorder = supporter ? GOLD : '#5AAFFF';
 
   const knobStyle = useAnimatedStyle(() => ({
     transform: [
@@ -232,8 +237,9 @@ export function Joystick(props?: Partial<WidgetProps>) {
     backgroundColor: interpolateColor(
       activeProgress.value,
       [0, 1],
-      ['transparent', theme.colors.accentPrimary],
+      ['transparent', accent],
     ),
+    borderColor: knobBorder,
   }));
 
   return (

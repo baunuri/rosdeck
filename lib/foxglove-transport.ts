@@ -1,12 +1,31 @@
 import type { Transport, Subscription, TopicInfo, TransportStatus } from './transport';
 import { MessageReader } from '@foxglove/rosmsg2-serialization';
 import { parse as parseMessageDefinition } from '@foxglove/rosmsg';
+import { createBinaryWebSocket } from './binary-websocket';
+import { isJazzyMarkerSchema, parseMarkerArrayFast } from './marker-cdr';
+import { linkReport, type LinkSample } from './link-health';
+
+/**
+ * A topic whose messages take T ms to decode is delivered at most once per DECODE_BACKOFF×T ms,
+ * capping it at ~20% of the JS thread. Hermes decodes a 7.6k-marker MarkerArray in ~1 s; at its
+ * native 14 Hz that froze the app. Cheap topics (T ≈ 0) are unaffected.
+ */
+const DECODE_BACKOFF = 5;
 
 export class FoxgloveTransport implements Transport {
   private ws: WebSocket | null = null;
   private status: TransportStatus = 'disconnected';
   private statusListeners: Array<(status: TransportStatus, error?: string) => void> = [];
-  private subscriptions: Map<number, { topic: string; messageType: string; callback: (msg: any) => void }> = new Map();
+  private decodeMs = new Map<string, number>();
+  // Lag tracking (see lib/link-health.ts): per topic, the latest (local now − bridge timestamp)
+  // and bytes received since the last takeLinkSample().
+  private arrivals = new Map<string, { offsetMs: number; bytes: number; seenAt: number }>();
+  private minOffsetMs = Infinity;
+  private subscribedAt = new Map<string, number>();
+  private subscriptions: Map<number, {
+    topic: string; messageType: string; callback: (msg: any) => void;
+    throttleMs: number; lastDelivered: number;
+  }> = new Map();
   private nextSubId = 1;
   private serverChannels: Map<number, { topic: string; schemaName: string; encoding?: string }> = new Map();
   private topicToChannelId: Map<string, number> = new Map();
@@ -25,6 +44,26 @@ export class FoxgloveTransport implements Transport {
     return this.status;
   }
 
+  get minOffset() { return this.minOffsetMs; }
+
+  /** Worst queueing delay among topics heard in the last few seconds, above `baseline` (ms). */
+  lagAbove(baseline: number, now = Date.now()) {
+    return linkReport({ minOffsetMs: baseline, topics: this.linkTopics() }, now, 1000).lagMs;
+  }
+
+  private linkTopics() {
+    return [...this.arrivals].map(([topic, a]) => ({
+      topic, offsetMs: a.offsetMs, bytes: a.bytes, seenAt: a.seenAt, subscribedAt: this.subscribedAt.get(topic) ?? 0,
+    }));
+  }
+
+  /** Arrival stats since the previous call (byte counters reset). One caller: the lag banner. */
+  takeLinkSample(): LinkSample {
+    const topics = this.linkTopics();
+    for (const a of this.arrivals.values()) a.bytes = 0;
+    return { minOffsetMs: this.minOffsetMs, topics };
+  }
+
   private setStatus(status: TransportStatus, error?: string) {
     this.status = status;
     this.statusListeners.forEach((cb) => cb(status, error));
@@ -41,12 +80,10 @@ export class FoxgloveTransport implements Transport {
       }, 5000);
 
       // foxglove_bridge 3.x uses 'foxglove.sdk.v1' subprotocol.
-      // React Native on Android needs it passed as a custom header.
-      const ws = new (WebSocket as any)(url, undefined, {
-        headers: { 'Sec-WebSocket-Protocol': 'foxglove.sdk.v1' },
-      }) as WebSocket;
+      // Standard protocols argument: RN forwards it natively and browsers honor it
+      // (browsers ignore the RN-only `headers` option).
+      const ws = createBinaryWebSocket(url, ['foxglove.sdk.v1']);
       this.ws = ws;
-      ws.binaryType = 'arraybuffer';
 
       ws.onopen = () => {
         clearTimeout(timeout);
@@ -54,10 +91,12 @@ export class FoxgloveTransport implements Transport {
         resolve();
       };
 
-      ws.onerror = () => {
+      ws.onerror = (event: any) => {
         clearTimeout(timeout);
-        this.setStatus('error', 'Connection error');
-        reject(new Error('Connection error'));
+        // RN's error event carries `message`; browsers' carries nothing useful.
+        const message = event?.message ? `Connection error: ${event.message}` : 'Connection error';
+        this.setStatus('error', message);
+        reject(new Error(message));
       };
 
       ws.onclose = () => {
@@ -124,18 +163,25 @@ export class FoxgloveTransport implements Transport {
     const topic = this.bridgeSubToTopic.get(subscriptionId);
     if (!topic) return;
 
-    // SDK v1: opcode(1) + subId(4) + timestamp(8) = 13 byte header
-    const payloadBytes = new Uint8Array(bytes.buffer.slice(bytes.byteOffset + 13));
-    const channelInfo = this.getChannelForTopic(topic);
-
-    // Skip expensive deserialization if no subscriber wants this channel's schema.
-    // e.g. camera subscribes for CompressedImage but topic publishes raw Image.
-    if (channelInfo?.schemaName) {
-      const wantedByAnyone = [...this.subscriptions.values()].some(
-        (s) => s.topic === topic && s.messageType === channelInfo.schemaName,
-      );
-      if (!wantedByAnyone) return;
+    // Every frame counts toward lag/bandwidth, throttled or not: it already crossed the link.
+    const now = Date.now();
+    const offsetMs = now - Number(view.getBigUint64(5, true)) / 1e6;
+    if (offsetMs < this.minOffsetMs) this.minOffsetMs = offsetMs;
+    const arrival = this.arrivals.get(topic);
+    if (arrival) {
+      arrival.offsetMs = offsetMs; arrival.bytes += bytes.byteLength; arrival.seenAt = now;
+    } else {
+      this.arrivals.set(topic, { offsetMs, bytes: bytes.byteLength, seenAt: now });
     }
+
+    // Throttled or unwanted messages are dropped before any copy or deserialization.
+    const due = this.dueSubscribers(topic, now);
+    if (due.length === 0) return;
+
+    // SDK v1: opcode(1) + subId(4) + timestamp(8) = 13 byte header
+    // Bounded slice: `bytes` may be a view into a larger buffer (batched frames).
+    const payloadBytes = new Uint8Array(bytes.buffer.slice(bytes.byteOffset + 13, bytes.byteOffset + bytes.byteLength));
+    const channelInfo = this.getChannelForTopic(topic);
 
     let parsedMsg: any;
     if (channelInfo?.encoding === 'cdr' && channelInfo.schemaName) {
@@ -145,12 +191,25 @@ export class FoxgloveTransport implements Transport {
         try {
           parsedMsg = this.parseCompressedImageFast(payloadBytes);
         } catch { return; }
+      } else if (channelInfo.schemaName === 'visualization_msgs/msg/MarkerArray') {
+        // Generic decoding of large marker arrays takes ~1 s in Hermes (see lib/marker-cdr.ts).
+        const started = Date.now();
+        try {
+          const schema = this.schemaDefinitions.get(channelInfo.schemaName) ?? '';
+          parsedMsg = parseMarkerArrayFast(payloadBytes, isJazzyMarkerSchema(schema));
+        } catch { return; }
+        const took = Date.now() - started;
+        this.decodeMs.set(topic, 0.7 * (this.decodeMs.get(topic) ?? took) + 0.3 * took);
       } else {
         const reader = this.getMessageReader(channelInfo.schemaName);
         if (!reader) return;
+        const started = Date.now();
         try {
           parsedMsg = reader.readMessage(payloadBytes);
         } catch { return; }
+        // Smoothed decode time per topic (drives the backoff in dueSubscribers).
+        const took = Date.now() - started;
+        this.decodeMs.set(topic, 0.7 * (this.decodeMs.get(topic) ?? took) + 0.3 * took);
       }
     } else {
       try {
@@ -162,11 +221,27 @@ export class FoxgloveTransport implements Transport {
     // whose subId the bridge used. This is necessary because foxglove_bridge
     // may only ever send messages tagged with the first subscription ID for a
     // given channel, ignoring subsequent ones from the same client.
-    for (const [, sub] of this.subscriptions) {
-      if (sub.topic === topic && (!channelInfo?.schemaName || sub.messageType === channelInfo.schemaName)) {
-        try { sub.callback(parsedMsg); } catch {}
-      }
+    for (const sub of due) {
+      sub.lastDelivered = now;
+      try { sub.callback(parsedMsg); } catch {}
     }
+  }
+
+  /**
+   * Subscribers wanting this topic's next message. Same semantics as rosbridge's
+   * throttle_rate, enforced client-side before deserialization so large messages
+   * (point clouds) are cheap to drop.
+   */
+  private dueSubscribers(topic: string, now: number) {
+    const schemaName = this.getChannelForTopic(topic)?.schemaName;
+    // Back off topics that are expensive to decode so they can't monopolise the JS thread.
+    // Never TF: each message may carry different transforms (/tf_static has one latched message
+    // per publisher, back to back), so a skipped one can lose a link of the tree for good.
+    const minGap = schemaName === 'tf2_msgs/msg/TFMessage' ? 0 : DECODE_BACKOFF * (this.decodeMs.get(topic) ?? 0);
+    return [...this.subscriptions.values()].filter((s) =>
+      s.topic === topic &&
+      (!schemaName || s.messageType === schemaName) &&
+      now - s.lastDelivered >= Math.max(s.throttleMs, minGap));
   }
 
   private getChannelForTopic(topic: string): { encoding?: string; schemaName?: string } | undefined {
@@ -276,15 +351,19 @@ export class FoxgloveTransport implements Transport {
     this.schemaDefinitions.clear();
     this.topicBridgeSub.clear();
     this.bridgeSubToTopic.clear();
+    this.arrivals.clear();
+    this.subscribedAt.clear();
+    this.minOffsetMs = Infinity;
     this.setStatus('disconnected');
   }
 
-  subscribe(topic: string, messageType: string, callback: (msg: any) => void, _throttleRate?: number): Subscription {
+  subscribe(topic: string, messageType: string, callback: (msg: any) => void, throttleRate?: number): Subscription {
     const subId = this.nextSubId++;
-    this.subscriptions.set(subId, { topic, messageType, callback });
+    this.subscriptions.set(subId, { topic, messageType, callback, throttleMs: throttleRate ?? 0, lastDelivered: 0 });
 
     if (!this.topicBridgeSub.has(topic)) {
       // First subscriber for this topic — create the bridge-level subscription.
+      this.subscribedAt.set(topic, Date.now());
       this.topicBridgeSub.set(topic, subId);
       this.bridgeSubToTopic.set(subId, topic);
       const channelId = this.topicToChannelId.get(topic);
@@ -374,5 +453,107 @@ export class FoxgloveTransport implements Transport {
     return () => {
       this.statusListeners = this.statusListeners.filter((cb) => cb !== callback);
     };
+  }
+}
+
+/**
+ * Message types big enough to back up the link. foxglove_bridge queues each client's messages
+ * in one FIFO, so a backed-up point cloud stream delays everything behind it, /tf included.
+ * These get a second connection (own bridge queue, own TCP stream); everything else, plus
+ * publishing, stays on the first, so the robot pose and small topics stay current.
+ */
+const BULK_TYPES = new Set([
+  'sensor_msgs/msg/PointCloud2', 'sensor_msgs/msg/Image', 'sensor_msgs/msg/CompressedImage',
+  'foxglove_msgs/msg/CompressedVideo', 'nav_msgs/msg/OccupancyGrid', 'visualization_msgs/msg/MarkerArray',
+]);
+
+/**
+ * When the bulk connection is this far behind, replace it: the bridge frees a closed client's
+ * queue. Safety net for bridges whose per-client queue is unbounded in practice (foxglove_bridge
+ * < 3.4, or the default message_backlog_size of 1024 large messages ≈ GBs on the robot).
+ */
+const BULK_RESET_LAG_MS = 3000;
+/** Give a fresh connection time to get going before judging it again. */
+const BULK_RESET_COOLDOWN_MS = 10_000;
+
+export class SplitFoxgloveTransport implements Transport {
+  private main: FoxgloveTransport;
+  private bulk: FoxgloveTransport;
+  private url = '';
+  private bulkSubs = new Set<{ topic: string; type: string; cb: (msg: any) => void; throttle?: number; handle: Subscription }>();
+  private watchdog: ReturnType<typeof setInterval> | null = null;
+  private lastReset = 0;
+  private resets = 0;
+
+  constructor(private readonly makeTransport = () => new FoxgloveTransport()) {
+    this.main = makeTransport();
+    this.bulk = makeTransport();
+  }
+
+  async connect(url: string): Promise<void> {
+    this.url = url;
+    const [main, bulk] = await Promise.allSettled([this.main.connect(url), this.bulk.connect(url)]);
+    if (main.status === 'rejected') { this.bulk.disconnect(); throw main.reason; }
+    // ponytail: no second connection (e.g. a client limit) → everything shares the first.
+    if (bulk.status === 'rejected') { this.bulk = this.main; return; }
+    this.watchBulk(this.bulk);
+    this.lastReset = Date.now();
+    this.watchdog = setInterval(() => this.checkBulkLag(), 1000);
+  }
+
+  /** Losing the bulk connection loses its topics: treat it as losing the robot (unless we replaced it). */
+  private watchBulk(t: FoxgloveTransport) {
+    t.onStatus((s) => { if (t === this.bulk && (s === 'disconnected' || s === 'error')) this.main.disconnect(); });
+  }
+
+  checkBulkLag(now = Date.now()) {
+    if (this.main.getStatus() !== 'connected') { this.stopWatchdog(); return; }
+    if (now - this.lastReset < BULK_RESET_COOLDOWN_MS) return;
+    // Main carries /tf, so its baseline stays honest while bulk is backed up.
+    const baseline = Math.min(this.main.minOffset, this.bulk.minOffset);
+    if (this.bulk.lagAbove(baseline, now) > BULK_RESET_LAG_MS) this.resetBulk(now);
+  }
+
+  private async resetBulk(now: number) {
+    this.lastReset = now;
+    const fresh = this.makeTransport();
+    try { await fresh.connect(this.url); } catch { return; } // keep the old one; retry after the cooldown
+    for (const s of this.bulkSubs) s.handle = fresh.subscribe(s.topic, s.type, s.cb, s.throttle);
+    const old = this.bulk;
+    this.bulk = fresh;
+    this.watchBulk(fresh);
+    this.resets++;
+    old.disconnect();
+  }
+
+  private stopWatchdog() {
+    if (this.watchdog) clearInterval(this.watchdog);
+    this.watchdog = null;
+  }
+
+  disconnect(): void {
+    this.stopWatchdog();
+    this.main.disconnect();
+    if (this.bulk !== this.main) this.bulk.disconnect();
+  }
+
+  subscribe(topic: string, messageType: string, callback: (msg: any) => void, throttleRate?: number): Subscription {
+    if (!BULK_TYPES.has(messageType)) return this.main.subscribe(topic, messageType, callback, throttleRate);
+    const entry = { topic, type: messageType, cb: callback, throttle: throttleRate, handle: this.bulk.subscribe(topic, messageType, callback, throttleRate) };
+    this.bulkSubs.add(entry);
+    return { unsubscribe: () => { this.bulkSubs.delete(entry); entry.handle.unsubscribe(); } };
+  }
+
+  publish(topic: string, messageType: string, msg: any): void { this.main.publish(topic, messageType, msg); }
+  getTopics(): Promise<TopicInfo[]> { return this.main.getTopics(); }
+  onStatus(cb: (status: TransportStatus, error?: string) => void): () => void { return this.main.onStatus(cb); }
+  getStatus(): TransportStatus { return this.main.getStatus(); }
+
+  takeLinkSample(): LinkSample {
+    const a = this.main.takeLinkSample();
+    if (this.bulk === this.main) return a;
+    const b = this.bulk.takeLinkSample();
+    // Same two clocks on both connections, so the smaller baseline applies to both.
+    return { minOffsetMs: Math.min(a.minOffsetMs, b.minOffsetMs), topics: [...a.topics, ...b.topics], resets: this.resets };
   }
 }
