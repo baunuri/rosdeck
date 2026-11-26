@@ -21,6 +21,7 @@ import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 
 import { useRosStore } from '../stores/useRosStore';
 import { useOnboardingStore } from '../stores/useOnboardingStore';
+import { useSupporterStore } from '../stores/useSupporterStore';
 import { useSettingsStore } from '../stores/useSettingsStore';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 
@@ -64,6 +65,7 @@ function RootLayoutNav() {
     useRosStore.getState().loadSavedConnections();
     useOnboardingStore.getState().loadOnboarding();
     useSettingsStore.getState().load();
+    useSupporterStore.getState().load();
 
     const handleAppState = (nextState: AppStateStatus) => {
       const store = useRosStore.getState();

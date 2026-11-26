@@ -52,7 +52,15 @@
       ],
       "./plugins/withSwiftConcurrencyFix",
       "./modules/expo-gamepad/plugin/withGamepadActivity",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-iap",
+        {
+          "android": {
+            "store": "play"
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

@@ -6,6 +6,7 @@ import {
   Switch,
   TouchableOpacity,
   Alert,
+  Platform,
   StyleSheet,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,6 +19,7 @@ import { useLayoutStore } from '../../stores/useLayoutStore';
 import { usePresetsStore } from '../../stores/usePresetsStore';
 import { useOnboardingStore } from '../../stores/useOnboardingStore';
 import { SetupGuide } from '../../components/SetupGuide';
+import { SupportSection } from '../../components/SupportSection';
 import { useOrientation } from '../../hooks/useOrientation';
 import { theme } from '../../constants/theme';
 
@@ -362,6 +364,8 @@ export default function SettingsScreen() {
           </Text>
         </TouchableOpacity>
       </View>
+
+      {Platform.OS === 'android' && <SupportSection />}
 
       <Text style={styles.sectionTitle}>ABOUT</Text>
       <View style={styles.card}>

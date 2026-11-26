@@ -14,6 +14,7 @@ import { type TwistField } from "../lib/ros";
 import { useCmdVelPublisher } from "../hooks/useCmdVelPublisher";
 import { useCmdVelStore } from "../stores/useCmdVelStore";
 import { useGamepadStore } from '../stores/useGamepadStore';
+import { GOLD, useSupporterStore } from "../stores/useSupporterStore";
 import { useSettingsStore } from "../stores/useSettingsStore";
 import type { WidgetProps } from "../types/layout";
 import { registerTouchEntry, unregisterTouchEntry, updateTouchBounds } from "../lib/touch-dispatcher";
@@ -224,6 +225,9 @@ export function Joystick(props?: Partial<WidgetProps>) {
   }, [scaledRadius]);
 
   const halfRadius = scaledRadius * 0.5;
+  const supporter = useSupporterStore((s) => s.supporter); // tip easter egg: gold knob
+  const accent = supporter ? GOLD : theme.colors.accentPrimary;
+  const knobBorder = supporter ? GOLD : '#5AAFFF';
 
   const knobStyle = useAnimatedStyle(() => ({
     transform: [
@@ -233,8 +237,9 @@ export function Joystick(props?: Partial<WidgetProps>) {
     backgroundColor: interpolateColor(
       activeProgress.value,
       [0, 1],
-      ['transparent', theme.colors.accentPrimary],
+      ['transparent', accent],
     ),
+    borderColor: knobBorder,
   }));
 
   return (
