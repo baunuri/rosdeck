@@ -121,7 +121,8 @@ export interface SceneRenderer {
   setTexture(name: TextureLayer, image: GridImage | null): void;
   /** Re-places an existing texture layer (TF moved) without re-uploading its pixels. */
   moveTexture(name: TextureLayer, corners: Float32Array): void;
-  draw(mvp: Float32Array): void;
+  /** viewport in device pixels: expo-gl's drawingBufferWidth/Height keep the size from context creation. */
+  draw(mvp: Float32Array, viewportW: number, viewportH: number): void;
 }
 
 function program(gl: WebGLRenderingContext, vs: string, fs: string) {
@@ -221,9 +222,7 @@ export function createSceneRenderer(gl: ExpoWebGLRenderingContext): SceneRendere
       if (layer?.kind === 'texture') upload(layer.buffer, corners);
     },
 
-    draw(mvp) {
-      const w = gl.drawingBufferWidth;
-      const h = gl.drawingBufferHeight;
+    draw(mvp, w, h) {
       gl.viewport(0, 0, w, h);
       gl.clearColor(0.027, 0.039, 0.059, 1); // #070A0F, the widget background
       gl.clear(gl.COLOR_BUFFER_BIT);

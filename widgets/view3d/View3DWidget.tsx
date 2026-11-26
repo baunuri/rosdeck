@@ -243,7 +243,7 @@ export function View3DWidget(props: Partial<WidgetProps>) {
     ].join('|');
     if (signature !== lastDrawn.current) {
       lastDrawn.current = signature;
-      renderer.draw(viewProjection(cam, w, h));
+      renderer.draw(viewProjection(cam, w, h), Math.round(w * PixelRatio.get()), Math.round(h * PixelRatio.get()));
     }
 
     const next = { frame: fixed, fallback: fixed !== fixedFrame, robot: Boolean(pose) };
