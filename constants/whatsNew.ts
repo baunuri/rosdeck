@@ -5,7 +5,7 @@
 export const WHATS_NEW: { version: string; notes: string[] } = {
   version: '1.0.5',
   notes: [
-    'RViz-style 3D View: map, costmaps, scans, point clouds, paths, markers, footprint and TF, with orbit and top-down cameras',
+    'RViz-style 3D View: maps, costmaps, scans, point clouds, paths, markers and TF',
     'Nav goal and pose estimate tools: hold to place, drag to aim',
     'GPS Map widget: robot position on satellite or street maps',
     'H.264/H.265 camera streams (foxglove CompressedVideo)',
