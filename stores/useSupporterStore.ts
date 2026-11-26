@@ -8,13 +8,12 @@ const STORAGE_KEY = 'ros2mobile_supporter';
 export const GOLD = '#FBBF24';
 
 interface SupporterState {
-  /** Set after any tip; unlocks the gold joystick and the badge. */
+  /** Owns any tip; unlocks the gold joystick and the badge. Cached here, confirmed from Play at launch. */
   supporter: boolean;
   load: () => Promise<void>;
-  markSupporter: () => void;
+  setSupporter: (value: boolean) => void;
 }
 
-// ponytail: device-local flag; a reinstall forgets it (consumed tips aren't queryable). Fine for an easter egg.
 export const useSupporterStore = create<SupporterState>((set) => ({
   supporter: false,
   load: async () => {
@@ -22,8 +21,8 @@ export const useSupporterStore = create<SupporterState>((set) => ({
       if ((await AsyncStorage.getItem(STORAGE_KEY)) === '1') set({ supporter: true });
     } catch {}
   },
-  markSupporter: () => {
-    set({ supporter: true });
-    AsyncStorage.setItem(STORAGE_KEY, '1').catch(() => {});
+  setSupporter: (value) => {
+    set({ supporter: value });
+    AsyncStorage.setItem(STORAGE_KEY, value ? '1' : '0').catch(() => {});
   },
 }));

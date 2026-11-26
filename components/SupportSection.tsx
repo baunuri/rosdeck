@@ -1,35 +1,59 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Alert, Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { ErrorCode, useIAP, type Purchase } from 'expo-iap';
+import {
+  ErrorCode, finishTransaction, getAvailablePurchases, initConnection, useIAP, type Purchase,
+} from 'expo-iap';
 import { GOLD, useSupporterStore } from '../stores/useSupporterStore';
 import { theme } from '../constants/theme';
 
-/** Consumable Play products (Monetize → Products → One-time products), so people can tip again. */
-export const TIP_SKUS = ['tip_small', 'tip_medium', 'tip_large'];
+/**
+ * One-time (non-consumable) Play products, so owned tips come back after a reinstall or on a
+ * new phone. Each tier can be bought once. Prices come from Play (local currency).
+ */
+export const TIPS = [
+  { sku: 'tip_hobbyist', label: 'Hobby roboticist', icon: 'construct-outline' },
+  { sku: 'tip_lab', label: 'Robotics lab', icon: 'flask-outline' },
+  { sku: 'tip_company', label: 'Robotics company', icon: 'business-outline' },
+  { sku: 'tip_industrial', label: 'Industrial giant', icon: 'planet-outline' },
+] as const;
+const TIP_SKUS: string[] = TIPS.map((t) => t.sku);
+const SPONSOR_MAIL = 'mailto:contact@baunuri.com?subject=ROSDeck%20sponsorship';
 
-/** Tip jar for Settings (Android only). Any tip unlocks the gold joystick + supporter badge. */
+const ownedTips = (purchases: Purchase[]) =>
+  purchases.filter((p) => TIP_SKUS.includes(p.productId) && p.purchaseState === 'purchased');
+
+/**
+ * At launch: owned tips → supporter, none → not (a refund takes the gold back). Also acknowledges
+ * tips left unfinished by a crash; Play refunds unacknowledged purchases after 3 days.
+ * Offline or no Play: keep the cached flag.
+ */
+export async function syncSupporterFromPlay() {
+  try {
+    await initConnection();
+    const owned = ownedTips(await getAvailablePurchases());
+    for (const p of owned) {
+      if (!('isAcknowledgedAndroid' in p && p.isAcknowledgedAndroid)) await finishTransaction({ purchase: p, isConsumable: false });
+    }
+    useSupporterStore.getState().setSupporter(owned.length > 0);
+  } catch {}
+}
+
+/** Tip jar + sponsor contact for Settings (Android only). Any tip unlocks the gold joystick + badge. */
 export function SupportSection() {
   const supporter = useSupporterStore((s) => s.supporter);
-  const markSupporter = useSupporterStore((s) => s.markSupporter);
   const [busy, setBusy] = useState<string | null>(null);
-  const handled = useRef(new Set<string>()); // the success callback and the pending check can both deliver one purchase
 
-  // Consume the tip (so it can be bought again) and say thanks. Play refunds purchases
-  // that aren't acknowledged within 3 days, so this also runs for ones left from a crash.
-  const complete = async (purchase: Purchase) => {
-    if (!TIP_SKUS.includes(purchase.productId) || purchase.purchaseState !== 'purchased') return;
-    const key = purchase.purchaseToken ?? purchase.id;
-    if (handled.current.has(key)) return;
-    handled.current.add(key);
-    await finishTransaction({ purchase, isConsumable: true });
-    const first = !useSupporterStore.getState().supporter;
-    markSupporter();
-    Alert.alert('Thank you!', first ? 'Your joystick just turned gold.' : 'Thanks for supporting ROSDeck again.');
-  };
-
-  const { connected, products, fetchProducts, requestPurchase, finishTransaction, getAvailablePurchases, availablePurchases } = useIAP({
-    onPurchaseSuccess: (p) => { setBusy(null); complete(p).catch(() => {}); },
+  const { connected, products, fetchProducts, requestPurchase, getAvailablePurchases: refreshOwned, availablePurchases } = useIAP({
+    onPurchaseSuccess: async (p) => {
+      setBusy(null);
+      if (!TIP_SKUS.includes(p.productId) || p.purchaseState !== 'purchased') return; // pending: finished on a later launch
+      try { await finishTransaction({ purchase: p, isConsumable: false }); } catch {}
+      const first = !useSupporterStore.getState().supporter;
+      useSupporterStore.getState().setSupporter(true);
+      refreshOwned().catch(() => {});
+      Alert.alert('Thank you!', first ? 'Your joystick just turned gold.' : 'Thanks for supporting ROSDeck again.');
+    },
     onPurchaseError: (e) => {
       setBusy(null);
       if (e.code !== ErrorCode.UserCancelled) Alert.alert('Purchase failed', e.message);
@@ -39,12 +63,11 @@ export function SupportSection() {
   useEffect(() => {
     if (!connected) return;
     fetchProducts({ skus: TIP_SKUS, type: 'in-app' }).catch(() => {});
-    getAvailablePurchases().catch(() => {});
+    refreshOwned().catch(() => {});
   }, [connected]);
 
-  useEffect(() => { availablePurchases.forEach((p) => complete(p).catch(() => {})); }, [availablePurchases]);
-
-  const tips = TIP_SKUS.map((id) => products.find((p) => p.id === id)).filter((p) => p != null);
+  const owned = new Set(ownedTips(availablePurchases).map((p) => p.productId));
+  const tiers = TIPS.map((t) => ({ ...t, product: products.find((p) => p.id === t.sku) })).filter((t) => t.product);
 
   return (
     <>
@@ -59,27 +82,40 @@ export function SupportSection() {
         <Text style={styles.blurb}>
           ROSDeck is free and has no ads. If it helps your robots, a tip keeps it going.
         </Text>
-        {tips.length === 0 ? (
+        {tiers.length === 0 ? (
           <Text style={styles.muted}>{connected ? 'Tips aren’t available right now.' : 'Connecting to Google Play…'}</Text>
         ) : (
-          <View style={styles.row}>
-            {tips.map((p) => (
+          tiers.map((t) => {
+            const has = owned.has(t.sku);
+            return (
               <TouchableOpacity
-                key={p.id}
-                style={[styles.tip, busy !== null && styles.disabled]}
-                disabled={busy !== null}
-                accessibilityLabel={`Tip ${p.displayPrice}`}
+                key={t.sku}
+                style={[styles.tier, has && styles.tierOwned, busy !== null && !has && styles.disabled]}
+                disabled={has || busy !== null}
+                accessibilityLabel={`${t.label} tip, ${t.product!.displayPrice}${has ? ', owned' : ''}`}
                 onPress={() => {
-                  setBusy(p.id);
-                  requestPurchase({ request: { google: { skus: [p.id] } }, type: 'in-app' }).catch(() => setBusy(null));
+                  setBusy(t.sku);
+                  requestPurchase({ request: { google: { skus: [t.sku] } }, type: 'in-app' }).catch(() => setBusy(null));
                 }}
               >
-                <Ionicons name={p.id === 'tip_small' ? 'cafe-outline' : p.id === 'tip_medium' ? 'pizza-outline' : 'rocket-outline'} size={18} color={GOLD} />
-                <Text style={styles.price}>{p.displayPrice}</Text>
+                <Ionicons name={t.icon} size={18} color={GOLD} />
+                <Text style={styles.tierLabel}>{t.label}</Text>
+                {has
+                  ? <Ionicons name="checkmark-circle" size={18} color={GOLD} />
+                  : <Text style={styles.price}>{t.product!.displayPrice}</Text>}
               </TouchableOpacity>
-            ))}
-          </View>
+            );
+          })
         )}
+        <View style={styles.divider} />
+        <TouchableOpacity style={styles.sponsor} onPress={() => Linking.openURL(SPONSOR_MAIL).catch(() => {})}>
+          <Ionicons name="ribbon-outline" size={16} color={theme.colors.accentPrimary} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.sponsorTitle}>Become a sponsor</Text>
+            <Text style={styles.muted}>Your logo here, for companies and labs. contact@baunuri.com</Text>
+          </View>
+          <Ionicons name="mail-outline" size={16} color={theme.colors.textMuted} />
+        </TouchableOpacity>
       </View>
     </>
   );
@@ -94,7 +130,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.lg,
     padding: 16,
     marginBottom: 8,
-    gap: 12,
+    gap: 10,
   },
   badge: {
     flexDirection: 'row',
@@ -111,16 +147,21 @@ const styles = StyleSheet.create({
   badgeText: { fontFamily: 'SpaceMono', fontSize: 11, fontWeight: '700', color: GOLD, letterSpacing: 1 },
   blurb: { fontSize: 13, color: theme.colors.textSecondary, lineHeight: 18 },
   muted: { fontSize: 12, color: theme.colors.textMuted },
-  row: { flexDirection: 'row', gap: 8 },
-  tip: {
-    flex: 1,
+  tier: {
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 10,
     paddingVertical: 10,
+    paddingHorizontal: 12,
     borderRadius: theme.radius.md,
     borderWidth: 1,
     borderColor: GOLD + '55',
   },
+  tierOwned: { backgroundColor: GOLD + '14' },
+  tierLabel: { flex: 1, fontSize: 14, color: theme.colors.textPrimary },
   disabled: { opacity: 0.4 },
   price: { fontFamily: 'SpaceMono', fontSize: 13, color: theme.colors.textPrimary },
+  divider: { height: 1, backgroundColor: theme.colors.borderSubtle, marginVertical: 2 },
+  sponsor: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 4 },
+  sponsorTitle: { fontFamily: 'SpaceMono', fontSize: 13, color: theme.colors.accentPrimary },
 });
